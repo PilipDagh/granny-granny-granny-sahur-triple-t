@@ -1,29 +1,53 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tung Tung Tung Sahorror: Escape House 3D Granny</title>
+    <title>Tung Tung Tung Sahorror</title>
     <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 </head>
 <body>
-    <div id="ui-layer">
-        <div id="crosshair">+</div>
-        <div id="inventory">Key: <span id="key-status" style="color: red;">Not Found</span></div>
-    </div>
-    <div id="blocker">
-        <div id="instructions">
-            <h1 style="font-size:48px; color: #ff4444; text-shadow: 2px 2px #000; margin-bottom: 5px;">Tung Tung Tung Sahorror</h1>
-            <p style="font-size:24px; margin-top: 0;">Escape House 3D Granny</p>
-            <br />
-            <span style="font-size:20px; font-weight: bold; background: #5c4033; padding: 10px; border-radius: 5px;">Click to start</span><br /><br />
-            <p>Move: WASD | Look: Mouse | Sprint: Shift</p>
-            <p>Find the Green Key and reach the Red Door to escape!</p>
-            <p style="color: #ffaa00; font-weight: bold;">Beware of the Sahur Kentongan...</p>
+    <!-- Main Menu -->
+    <div id="main-menu">
+        <h1>Tung Tung Tung Sahorror</h1>
+        <div class="menu-box">
+            <input type="text" id="username-input" placeholder="Enter Username...">
+            <button id="btn-singleplayer">Play Single Player</button>
+            <button id="btn-multiplayer">Join Public Server</button>
+            <button id="btn-settings">Settings</button>
         </div>
     </div>
-    
-    <!-- Import Three.js directly from CDN -->
+
+    <!-- Settings Menu -->
+    <div id="settings-menu" class="hidden">
+        <h2>Settings</h2>
+        <label>Sensitivity: <input type="range" id="sensitivity" min="1" max="10" value="5"></label>
+        <br>
+        <label>Mobile Controls: <input type="checkbox" id="mobile-toggle"></label>
+        <br>
+        <button id="btn-back">Back</button>
+    </div>
+
+    <!-- Game HUD -->
+    <div id="game-ui" class="hidden">
+        <div id="pause-btn">||</div>
+        <div id="lives-display">Lives: 5</div>
+        <div id="crosshair">+</div>
+        
+        <!-- Mobile Joysticks -->
+        <div id="joystick-move" class="joystick hidden"></div>
+        <div id="joystick-look" class="joystick hidden"></div>
+        
+        <div id="interact-prompt">Press E to interact</div>
+    </div>
+
+    <!-- Pause Menu -->
+    <div id="pause-menu" class="hidden">
+        <h2>Paused</h2>
+        <button id="btn-resume">Resume</button>
+        <button id="btn-exit">Exit to Menu</button>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
     <script type="importmap">
         {
             "imports": {
