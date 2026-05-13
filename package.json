@@ -1,19 +1,12 @@
 {
-  "name": "granny-granny-granny-sahur-triple-t",
+  "name": "tung-tung-tung-sahorror",
   "version": "1.0.0",
-  "description": "Granny 3D Tung Tung Tung Sahur - A spooky multiplayer game",
+  "description": "Tung Tung Tung Sahorror: Escape House 3D Granny",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.5.4"
-  },
-  "engines": {
-    "node": ">=16.x"
-  },
-  "keywords": ["Granny", "Render", "Multiplayer", "THREE.js"],
-  "author": "PilipDagh",
-  "license": "MIT"
+    "express": "^4.18.2"
+  }
 }
