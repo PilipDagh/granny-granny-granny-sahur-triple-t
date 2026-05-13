@@ -3,16 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Granny 3D Tung Tung Tung Sahur</title>
+    <title>Tung Tung Tung Sahorror: Escape House 3D Granny</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
-    <div id="instructions">
-        <h1>Tung Tung Tung Sahur</h1>
-        <p>Use WASD keys to move around and escape from Granny!</p>
-        <p>Collect all items without getting caught!</p>
+    <div id="ui-layer">
+        <div id="crosshair">+</div>
+        <div id="inventory">Key: <span id="key-status" style="color: red;">Not Found</span></div>
     </div>
-    <script src="client.js" defer></script>
+    <div id="blocker">
+        <div id="instructions">
+            <h1 style="font-size:48px; color: #ff4444; text-shadow: 2px 2px #000; margin-bottom: 5px;">Tung Tung Tung Sahorror</h1>
+            <p style="font-size:24px; margin-top: 0;">Escape House 3D Granny</p>
+            <br />
+            <span style="font-size:20px; font-weight: bold; background: #5c4033; padding: 10px; border-radius: 5px;">Click to start</span><br /><br />
+            <p>Move: WASD | Look: Mouse | Sprint: Shift</p>
+            <p>Find the Green Key and reach the Red Door to escape!</p>
+            <p style="color: #ffaa00; font-weight: bold;">Beware of the Sahur Kentongan...</p>
+        </div>
+    </div>
+    
+    <!-- Import Three.js directly from CDN -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module" src="client.js"></script>
 </body>
 </html>
