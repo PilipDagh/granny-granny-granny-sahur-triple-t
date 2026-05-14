@@ -713,3 +713,265 @@ function connectToServer(username) {
     socket.on('gameWon', (winnerName) => { alert(`ESCAPE SUCCESSFUL! ${winnerName} unlocked the door!`); location.reload(); });
     socket.on('gameOverAll', () => { alert(`TUNG TUNG SAHUR KILLED EVERYONE. Game Over.`); location.reload(); });
 }
+
+// --- CONTINUING FROM PART 2 ---
+
+// --- CONTROLS & MOBILE INPUTS ---
+window.addEventListener('keydown', (e) => {
+    if (isDead) return;
+    if (e.code === 'KeyE') performInteraction();
+    if (e.code === 'KeyQ') dropItem();
+    switch (e.code) {
+        case 'ArrowUp': case 'KeyW': moveForward = true; break;
+        case 'ArrowLeft': case 'KeyA': moveLeft = true; break;
+        case 'ArrowDown': case 'KeyS': moveBackward = true; break;
+        case 'ArrowRight': case 'KeyD': moveRight = true; break;
+        case 'ShiftLeft': case 'ShiftRight': isSprinting = true; break;
+    }
+});
+
+window.addEventListener('keyup', (e) => {
+    switch (e.code) {
+        case 'ArrowUp': case 'KeyW': moveForward = false; break;
+        case 'ArrowLeft': case 'KeyA': moveLeft = false; break;
+        case 'ArrowDown': case 'KeyS': moveBackward = false; break;
+        case 'ArrowRight': case 'KeyD': moveRight = false; break;
+        case 'ShiftLeft': case 'ShiftRight': isSprinting = false; break;
+    }
+});
+
+// Left Click to Shoot!
+window.addEventListener('mousedown', (e) => {
+    if (e.button === 0 && document.pointerLockElement === document.body) {
+        shootCrossbow();
+    }
+});
+
+function setupMobileControls() {
+    if (!mobileEnabled) return;
+    
+    document.getElementById('joystick-move').classList.remove('hidden');
+    document.getElementById('joystick-look').classList.remove('hidden');
+    document.getElementById('mobile-interact').classList.remove('hidden');
+    document.getElementById('mobile-drop').classList.remove('hidden');
+
+    document.getElementById('mobile-interact').addEventListener('touchstart', performInteraction);
+    document.getElementById('mobile-drop').addEventListener('touchstart', dropItem);
+    document.getElementById('mobile-shoot').addEventListener('touchstart', shootCrossbow); // Mobile Shoot!
+
+    const moveZone = document.getElementById('joystick-move');
+    const lookZone = document.getElementById('joystick-look');
+
+    moveZone.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = moveZone.getBoundingClientRect();
+        mobileMoveData.x = Math.max(-1, Math.min(1, (touch.clientX - (rect.left + rect.width/2)) / 40));
+        mobileMoveData.y = Math.max(-1, Math.min(1, (touch.clientY - (rect.top + rect.height/2)) / 40));
+    }, { passive: false });
+
+    moveZone.addEventListener('touchend', () => mobileMoveData = { x: 0, y: 0 });
+
+    lookZone.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const rect = lookZone.getBoundingClientRect();
+        camera.rotation.y -= (touch.clientX - (rect.left + rect.width/2)) * lookSensitivity;
+        camera.rotation.x -= (touch.clientY - (rect.top + rect.height/2)) * lookSensitivity;
+        camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+    }, { passive: false });
+}
+
+// --- TUNG TUNG SMART AI & RAGDOLL RECOVERY ---
+function updateTungTungAI(delta) {
+    if (!granny || isDead) return;
+
+    // 1. IS HE KNOCKED OUT?
+    if (tungTungKnockedOut) {
+        tungTungKnockoutTimer -= delta;
+        if (tungTungKnockoutTimer <= 0) {
+            // WAKE UP!
+            tungTungKnockedOut = false;
+            granny.rotation.x = 0; // Stand back up
+            granny.position.y = 0; // Reset to floor level
+        }
+        return; // Do nothing else while knocked out!
+    }
+
+    let targetPos = null;
+    let minDistance = Infinity;
+
+    // 2. PRIORITY: Investigate Noise!
+    if (window.noiseTarget && window.noiseTimer > 0) {
+        targetPos = window.noiseTarget;
+        window.noiseTimer -= delta;
+        if (granny.position.distanceTo(window.noiseTarget) < 1.5) window.noiseTarget = null;
+    } 
+    // 3. Hunt Players
+    else {
+        if (isMultiplayer) {
+            for (const [id, pMesh] of Object.entries(remotePlayers)) {
+                if (pMesh.userData.isHiding) continue; 
+                const dist = granny.position.distanceTo(pMesh.position);
+                if (dist < minDistance) { minDistance = dist; targetPos = pMesh.position; }
+            }
+            if (!isHiding) {
+                const dist = granny.position.distanceTo(camera.position);
+                if (dist < minDistance) { minDistance = dist; targetPos = camera.position; }
+            }
+        } else {
+            if (!isHiding) {
+                targetPos = camera.position;
+                minDistance = granny.position.distanceTo(camera.position);
+            }
+        }
+    }
+
+    // Move Tung Tung
+    if (targetPos) {
+        const targetY = targetPos.y < 0 ? -2.5 : 0; 
+        granny.position.y += (targetY - granny.position.y) * 5 * delta; 
+
+        const lookTarget = new THREE.Vector3(targetPos.x, granny.position.y, targetPos.z);
+        granny.lookAt(lookTarget);
+        
+        const speed = isMultiplayer ? 3.0 : 2.5;
+        granny.translateZ(speed * delta);
+
+        if (targetPos === camera.position && minDistance < 1.2 && !isHiding) {
+            triggerDeath();
+        }
+    }
+}
+
+// --- DEATH & RESPAWN ---
+function triggerDeath() {
+    if (isDead) return;
+    isDead = true; lives--; currentDay++;
+    if (isMultiplayer) socket.emit('playerDied');
+
+    camera.lookAt(granny.position);
+    uiGame.classList.add('hidden');
+    uiDeath.classList.remove('hidden');
+    
+    if (lives > 0) {
+        uiDayText.innerText = `DAY ${currentDay}`;
+        setTimeout(respawnPlayer, 3000);
+    } else {
+        uiDayText.innerText = "GAME OVER";
+        uiDayText.style.color = "#ff0000";
+        if (!isMultiplayer) setTimeout(() => location.reload(), 3000);
+    }
+}
+
+function respawnPlayer() {
+    isDead = false; isHiding = false;
+    uiDeath.classList.add('hidden');
+    uiGame.classList.remove('hidden');
+    uiLives.innerText = `Lives: ${lives}`;
+    camera.position.set(0, 1.7, 0);
+    camera.rotation.set(0, 0, 0);
+    if (granny && !isMultiplayer) {
+        granny.position.set(0, 0, 15);
+        tungTungKnockedOut = false;
+        granny.rotation.x = 0;
+    }
+}
+
+function winGame() {
+    alert("ESCAPE SUCCESSFUL! You unlocked the door!");
+    location.reload();
+}
+
+// --- MAIN ANIMATION LOOP (WITH WALL COLLISIONS) ---
+function animate() {
+    requestAnimationFrame(animate);
+    const time = performance.now();
+    const delta = (time - prevTime) / 1000;
+    prevTime = time;
+
+    if (!isDead && (controls.isLocked || mobileEnabled)) {
+        checkInteractions();
+
+        if (!isHiding) {
+            // Store old position before moving
+            const oldPosition = camera.position.clone();
+
+            velocity.x -= velocity.x * 10.0 * delta;
+            velocity.z -= velocity.z * 10.0 * delta;
+
+            direction.z = Number(moveForward) - Number(moveBackward);
+            direction.x = Number(moveRight) - Number(moveLeft);
+            direction.normalize();
+
+            if (mobileEnabled) { direction.x += mobileMoveData.x; direction.z -= mobileMoveData.y; }
+
+            const currentSpeed = isSprinting ? 60.0 : 30.0;
+            if (moveForward || moveBackward || mobileMoveData.y !== 0) velocity.z -= direction.z * currentSpeed * delta;
+            if (moveLeft || moveRight || mobileMoveData.x !== 0) velocity.x -= direction.x * currentSpeed * delta;
+
+            controls.moveRight(-velocity.x * delta);
+            controls.moveForward(-velocity.z * delta);
+
+            // --- WALL COLLISION PHYSICS ---
+            // Create a bounding box around the player
+            const playerBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(0.6, 1.5, 0.6));
+            let hitWall = false;
+
+            for (let i = 0; i < collidableObjects.length; i++) {
+                const wallBox = new THREE.Box3().setFromObject(collidableObjects[i]);
+                if (playerBox.intersectsBox(wallBox)) {
+                    hitWall = true;
+                    break;
+                }
+            }
+
+            if (hitWall) {
+                // Revert to old position if we hit a wall!
+                camera.position.copy(oldPosition);
+                velocity.x = 0;
+                velocity.z = 0;
+            }
+
+            // --- BASEMENT RAMP PHYSICS ---
+            if (camera.position.x > 13 && camera.position.x < 17 && camera.position.z < -9 && camera.position.z > -21) {
+                const rampProgress = (camera.position.z + 9) / -12; 
+                camera.position.y = 1.7 - (rampProgress * 4.0); 
+            } 
+            else if (camera.position.z <= -21 && camera.position.x > 5) {
+                camera.position.y = -2.3; 
+            } 
+            else {
+                camera.position.y = 1.7;
+            }
+        }
+
+        updateTungTungAI(delta);
+
+        if (isMultiplayer && socket && socket.connected) {
+            socket.emit('move', { pos: camera.position, rot: camera.rotation.y });
+        }
+    }
+
+    renderer.render(scene, camera);
+}
+
+// --- PAUSE MENU LOGIC ---
+document.getElementById('pause-btn').addEventListener('click', () => {
+    if (!isMultiplayer && !mobileEnabled) controls.unlock();
+    uiPause.classList.remove('hidden');
+});
+
+document.getElementById('btn-resume').addEventListener('click', () => {
+    uiPause.classList.add('hidden');
+    if (!isMultiplayer && !mobileEnabled) controls.lock();
+});
+
+document.getElementById('btn-leave').addEventListener('click', () => location.reload());
+
+if (controls) {
+    controls.addEventListener('lock', () => uiPause.classList.add('hidden'));
+    controls.addEventListener('unlock', () => {
+        if (!isDead && uiMainMenu.classList.contains('hidden')) uiPause.classList.remove('hidden');
+    });
+}
