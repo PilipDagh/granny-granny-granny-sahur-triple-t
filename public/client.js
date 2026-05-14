@@ -33,7 +33,7 @@ let prevTime = performance.now();
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
 let mobileEnabled = false;
-let lookSensitivity = 0.005;
+let lookSensitivity = 0.05;
 let mobileMoveData = { x: 0, y: 0 };
 
 // --- DOM ELEMENTS ---
