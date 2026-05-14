@@ -8,17 +8,23 @@ let myId = null;
 let remotePlayers = {};
 let itemMeshes = {};
 let granny = null; 
+let collidableObjects = []; // NEW: Used to stop walking through walls!
 
 // Player State
 let lives = 5;
 let isDead = false;
 let inventory = null;
 let currentDay = 1;
+let ammo = 3; // NEW: Crossbow ammo
 
-// NEW: Stealth & Distraction State
+// Stealth & Distraction State
 let isHiding = false;
 window.noiseTarget = null;
 window.noiseTimer = 0;
+
+// NEW: Tung Tung Knockout State
+let tungTungKnockedOut = false;
+let tungTungKnockoutTimer = 0;
 
 // Movement & Mobile State
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
@@ -40,6 +46,7 @@ const uiDayText = document.getElementById('day-text');
 const uiLives = document.getElementById('lives-display');
 const uiInventory = document.getElementById('inventory-display');
 const uiInteract = document.getElementById('interact-prompt');
+const uiAmmo = document.getElementById('ammo-display'); // NEW
 
 // --- PROCEDURAL TEXTURE GENERATOR ---
 function createWoodTexture(baseColor, lineColor) {
@@ -82,52 +89,66 @@ floorTexture.repeat.set(4, 4);
 const wallMaterial = new THREE.MeshStandardMaterial({ map: wallTexture, roughness: 0.9 });
 const floorMaterial = new THREE.MeshStandardMaterial({ map: floorTexture, roughness: 0.8 });
 
-// --- WEB AUDIO API: TUNG TUNG SYNTHESIZER ---
+// --- WEB AUDIO API: SCARY TUNG TUNG SYNTHESIZER ---
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 const audioCtx = new AudioContext();
 
 function playTungSound(distance) {
     if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (tungTungKnockedOut) return; // Don't play sound if he's knocked out!
     
-    let vol = Math.max(0, 1 - (distance / 30)); 
+    let vol = Math.max(0, 1 - (distance / 40)); 
     if (vol <= 0) return;
 
+    // 1. The Wood Block Sound
     const osc = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
-    
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(200, audioCtx.currentTime); 
-    osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1); 
-    
+    osc.frequency.setValueAtTime(150, audioCtx.currentTime); 
+    osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.1); 
     gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
     gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15); 
-    
     osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
-    
     osc.start();
     osc.stop(audioCtx.currentTime + 0.2);
+
+    // 2. NEW: Scary Granny Creak/Groan Sound
+    if (Math.random() > 0.5) {
+        const creakOsc = audioCtx.createOscillator();
+        const creakGain = audioCtx.createGain();
+        creakOsc.type = 'sawtooth';
+        creakOsc.frequency.setValueAtTime(80 + Math.random()*40, audioCtx.currentTime);
+        creakOsc.frequency.linearRampToValueAtTime(40, audioCtx.currentTime + 0.5);
+        creakGain.gain.setValueAtTime(vol * 0.3, audioCtx.currentTime);
+        creakGain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+        creakOsc.connect(creakGain);
+        creakGain.connect(audioCtx.destination);
+        creakOsc.start();
+        creakOsc.stop(audioCtx.currentTime + 0.5);
+    }
 }
 
 setInterval(() => {
     if (granny && camera && !isDead && uiGame.classList.contains('hidden') === false) {
         const dist = granny.position.distanceTo(camera.position);
-        if (dist < 30) {
+        if (dist < 40) {
             playTungSound(dist);
-            setTimeout(() => playTungSound(dist), 250);
-            setTimeout(() => playTungSound(dist), 500);
+            setTimeout(() => playTungSound(dist), 300);
+            setTimeout(() => playTungSound(dist), 600);
         }
     }
-}, 2000);
+}, 2500);
 
-// --- ENGINE INITIALIZATION ---
+// --- ENGINE INITIALIZATION (BRIGHTER & FIXED CAMERA) ---
 function initEngine() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x020202);
-    scene.fog = new THREE.FogExp2(0x020202, 0.12);
+    scene.background = new THREE.Color(0x050505);
+    scene.fog = new THREE.FogExp2(0x050505, 0.05); // NEW: Thinner fog so it's brighter!
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(0, 1.7, 0);
+    camera.rotation.order = 'YXZ'; // NEW: CRITICAL FIX! Prevents camera roll/spaceship tilting!
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -137,14 +158,14 @@ function initEngine() {
 
     controls = new PointerLockControls(camera, document.body);
 
-    const flashlight = new THREE.SpotLight(0xffffff, 1.5, 20, Math.PI / 5, 0.5, 1);
+    const flashlight = new THREE.SpotLight(0xffffff, 2.0, 30, Math.PI / 4, 0.5, 1); // Brighter flashlight
     flashlight.position.set(0, 0, 0);
     flashlight.target.position.set(0, 0, -1);
     camera.add(flashlight);
     camera.add(flashlight.target);
     scene.add(camera);
 
-    const ambientLight = new THREE.AmbientLight(0x111111);
+    const ambientLight = new THREE.AmbientLight(0x444444); // NEW: Brighter ambient light
     scene.add(ambientLight);
 
     window.addEventListener('resize', () => {
@@ -154,7 +175,7 @@ function initEngine() {
     }, false);
 }
 
-// --- UI & MENU LOGIC (FIXED FOR MODULE SCOPE) ---
+// --- UI & MENU LOGIC ---
 document.getElementById('btn-settings').addEventListener('click', () => {
     uiMainMenu.classList.add('hidden');
     uiSettings.classList.remove('hidden');
@@ -174,7 +195,6 @@ document.getElementById('mobile-toggle').addEventListener('change', (e) => {
     mobileEnabled = e.target.checked;
 });
 
-// The Start Game Listeners
 document.getElementById('btn-singleplayer').addEventListener('click', () => startGame(false));
 document.getElementById('btn-multiplayer').addEventListener('click', () => startGame(true));
 
@@ -188,21 +208,21 @@ function startGame(multi) {
     if (audioCtx.state === 'suspended') audioCtx.resume();
 
     initEngine();
-    setupMobileControls(); // Will be defined in Part 2
+    setupMobileControls(); 
 
     if (isMultiplayer) {
-        connectToServer(username); // Will be defined in Part 2
+        connectToServer(username); 
     } else {
         buildHouse();
-        buildItems(null); // null uses local defaults (Defined in Part 2)
+        buildItems(null); 
         spawnTungTung();
         
         if (!mobileEnabled) controls.lock();
-        animate(); // Will be defined in Part 2
+        animate(); 
     }
 }
 
-// --- UPGRADED HOUSE CONSTRUCTION (BASEMENT & HIDING) ---
+// --- UPGRADED HOUSE CONSTRUCTION (WEAPONS ROOM & COLLISIONS) ---
 function createWall(x, y, z, width, rotationY = 0) {
     const wall = new THREE.Mesh(new THREE.BoxGeometry(width, 4, 0.5), wallMaterial);
     wall.position.set(x, y, z);
@@ -210,11 +230,13 @@ function createWall(x, y, z, width, rotationY = 0) {
     wall.castShadow = true;
     wall.receiveShadow = true;
     scene.add(wall);
+    collidableObjects.push(wall); // NEW: Add to collision array!
     return wall;
 }
 
 function buildHouse() {
-    // Main Floor & Ceiling
+    collidableObjects = []; // Reset collisions
+
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), floorMaterial);
     floor.rotation.x = -Math.PI / 2;
     scene.add(floor);
@@ -224,24 +246,35 @@ function buildHouse() {
     ceiling.position.y = 4;
     scene.add(ceiling);
 
-    // Bedroom (Spawn Room)
+    // Bedroom
     createWall(0, 2, -5, 10); 
     createWall(-5, 2, 0, 10, Math.PI / 2); 
     createWall(5, 2, 2.5, 5, Math.PI / 2); 
     createWall(0, 2, 5, 10); 
 
-    // THE BED (Interactive Hiding Spot)
     const bed = new THREE.Mesh(new THREE.BoxGeometry(3, 0.8, 6), new THREE.MeshStandardMaterial({color: 0x331111}));
     bed.position.set(-3, 0.4, -1);
     bed.name = "OBSTACLE_bed"; 
     scene.add(bed);
+    collidableObjects.push(bed);
 
     // Hallways
     createWall(10, 2, 5, 20, Math.PI / 2); 
     createWall(15, 2, -5, 10); 
     createWall(20, 2, 0, 10, Math.PI / 2); 
     
-    // THE BASEMENT
+    // NEW: WEAPONS ROOM
+    createWall(25, 2, 5, 10, Math.PI / 2); // Back wall of weapons room
+    createWall(20, 2, 10, 10); // Side wall
+    
+    // Weapons Case (Needs Weapons Key)
+    const weaponsCase = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 1), new THREE.MeshStandardMaterial({color: 0x222222}));
+    weaponsCase.position.set(22, 0.5, 8);
+    weaponsCase.name = "OBSTACLE_weaponsCase";
+    scene.add(weaponsCase);
+    collidableObjects.push(weaponsCase);
+
+    // Basement
     const ramp = new THREE.Mesh(new THREE.BoxGeometry(4, 0.5, 12), floorMaterial);
     ramp.position.set(15, -2, -15);
     ramp.rotation.x = Math.PI / 5;
@@ -252,11 +285,11 @@ function buildHouse() {
     basementFloor.rotation.x = -Math.PI / 2;
     scene.add(basementFloor);
 
-    createWall(15, -2, -35, 20); // Basement Back
-    createWall(5, -2, -25, 20, Math.PI/2); // Basement Left
-    createWall(25, -2, -25, 20, Math.PI/2); // Basement Right
+    createWall(15, -2, -35, 20); 
+    createWall(5, -2, -25, 20, Math.PI/2); 
+    createWall(25, -2, -25, 20, Math.PI/2); 
 
-    // Main Entrance & Door
+    // Main Entrance
     createWall(0, 2, 20, 20); 
     createWall(-10, 2, 12.5, 15, Math.PI / 2); 
     createWall(10, 2, 12.5, 15, Math.PI / 2); 
@@ -265,6 +298,7 @@ function buildHouse() {
     const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(3, 3.8, 0.2), new THREE.MeshStandardMaterial({color: 0x550000}));
     doorMesh.position.set(0, 1.9, 19.9);
     doorGroup.add(doorMesh);
+    collidableObjects.push(doorMesh);
 
     const plank = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.4, 0.3), new THREE.MeshStandardMaterial({map: wallTexture}));
     plank.position.set(0, 2, 19.7);
@@ -361,7 +395,7 @@ function createPlayerAvatar(id, username) {
     return group;
 }
 
-// --- ITEM GENERATION ---
+// --- ITEM GENERATION (ADDED CROSSBOW & WEAPONS KEY) ---
 function createItemMesh(type) {
     const group = new THREE.Group();
     if (type === 'hammer') {
@@ -380,15 +414,29 @@ function createItemMesh(type) {
         const teeth = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.05), new THREE.MeshStandardMaterial({color: 0xffd700}));
         teeth.position.set(0.1, 0.15, 0);
         group.add(base, teeth);
+    } else if (type === 'weapons_key') {
+        // Silver Key
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.4), new THREE.MeshStandardMaterial({color: 0xcccccc}));
+        const teeth = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.05), new THREE.MeshStandardMaterial({color: 0xcccccc}));
+        teeth.position.set(0.1, 0.15, 0);
+        group.add(base, teeth);
+    } else if (type === 'crossbow') {
+        // Crossbow Model
+        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.8), new THREE.MeshStandardMaterial({color: 0x3d2b22}));
+        const bow = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.05, 0.05), new THREE.MeshStandardMaterial({color: 0x555555}));
+        bow.position.set(0, 0, -0.3);
+        group.add(stock, bow);
     }
     return group;
 }
 
 function buildItems(initialState) {
     const itemsData = initialState ? initialState.items : {
-        'hammer': { pos: {x: 15, y: -3.5, z: -25}, visible: true }, // Basement!
+        'hammer': { pos: {x: 15, y: -3.5, z: -25}, visible: true },
         'pliers': { pos: {x: 12, y: 0.5, z: 5}, visible: true },
-        'master_key': { pos: {x: 0, y: 4.5, z: 0}, visible: true }
+        'master_key': { pos: {x: 0, y: 4.5, z: 0}, visible: true },
+        'weapons_key': { pos: {x: -3, y: 0.5, z: 8}, visible: true },
+        'crossbow': { pos: {x: 22, y: 0.5, z: 8}, visible: false } // Hidden until case is opened
     };
 
     for (const [id, data] of Object.entries(itemsData)) {
@@ -435,7 +483,12 @@ function checkInteractions() {
                     return;
                 }
 
-                let req = obsName === 'barricade' ? 'hammer' : (obsName === 'circuitBox' ? 'pliers' : 'master_key');
+                let req = "";
+                if (obsName === 'barricade') req = 'hammer';
+                if (obsName === 'circuitBox') req = 'pliers';
+                if (obsName === 'mainDoor') req = 'master_key';
+                if (obsName === 'weaponsCase') req = 'weapons_key';
+
                 if (inventory === req) {
                     uiInteract.innerText = `Press E to use ${req.replace('_', ' ')}`;
                     currentTarget = { type: 'obstacle', id: obsName, obj: obj };
@@ -449,9 +502,8 @@ function checkInteractions() {
 
 function performInteraction() {
     if (isHiding) {
-        // Exit hiding
         isHiding = false;
-        camera.position.set(-3, 1.7, 1); // Stand up next to bed
+        camera.position.set(-3, 1.7, 1); 
         if (isMultiplayer) socket.emit('setHiding', false);
         return;
     }
@@ -462,13 +514,24 @@ function performInteraction() {
         if (inventory) dropItem();
         inventory = currentTarget.id;
         uiInventory.innerText = `Holding: ${inventory.replace('_', ' ')}`;
+        
+        // Show Ammo UI if holding crossbow
+        if (inventory === 'crossbow') {
+            uiAmmo.classList.remove('hidden');
+            uiAmmo.innerText = `Arrows: ${ammo}`;
+            document.getElementById('mobile-shoot').classList.remove('hidden');
+        } else {
+            uiAmmo.classList.add('hidden');
+            document.getElementById('mobile-shoot').classList.add('hidden');
+        }
+
         if (isMultiplayer) socket.emit('itemAction', { itemId: inventory, action: 'pickup' });
         else currentTarget.obj.visible = false;
     } 
     else if (currentTarget.type === 'obstacle') {
         if (currentTarget.id === 'bed') {
             isHiding = true;
-            camera.position.set(-3, 0.2, -1); // Move camera under bed
+            camera.position.set(-3, 0.2, -1); 
             if (isMultiplayer) socket.emit('setHiding', true);
             return;
         }
@@ -476,6 +539,9 @@ function performInteraction() {
         if (isMultiplayer) socket.emit('puzzleSolved', { obstacleId: currentTarget.id });
         else {
             currentTarget.obj.visible = false;
+            if (currentTarget.id === 'weaponsCase') {
+                itemMeshes['crossbow'].visible = true; // Spawn crossbow locally
+            }
             if (currentTarget.id === 'mainDoor') winGame();
         }
         inventory = null;
@@ -489,11 +555,10 @@ function dropItem() {
     const dropPos = new THREE.Vector3();
     camera.getWorldDirection(dropPos);
     dropPos.multiplyScalar(1.5).add(camera.position);
-    dropPos.y = camera.position.y > 0 ? 0.5 : -3.5; // Drop on floor or basement floor
+    dropPos.y = camera.position.y > 0 ? 0.5 : -3.5; 
 
-    // NOISE DISTRACTION AI
     window.noiseTarget = dropPos.clone();
-    window.noiseTimer = 8.0; // Tung Tung investigates for 8 seconds
+    window.noiseTimer = 8.0; 
     
     if (isMultiplayer) {
         socket.emit('itemAction', { itemId: inventory, action: 'drop', pos: dropPos });
@@ -506,150 +571,67 @@ function dropItem() {
     
     inventory = null;
     uiInventory.innerText = `Holding: Nothing`;
+    uiAmmo.classList.add('hidden');
+    document.getElementById('mobile-shoot').classList.add('hidden');
 }
 
-// --- CONTROLS & MOBILE ---
-window.addEventListener('keydown', (e) => {
-    if (isDead) return;
-    if (e.code === 'KeyE') performInteraction();
-    if (e.code === 'KeyQ') dropItem();
-    switch (e.code) {
-        case 'ArrowUp': case 'KeyW': moveForward = true; break;
-        case 'ArrowLeft': case 'KeyA': moveLeft = true; break;
-        case 'ArrowDown': case 'KeyS': moveBackward = true; break;
-        case 'ArrowRight': case 'KeyD': moveRight = true; break;
-        case 'ShiftLeft': case 'ShiftRight': isSprinting = true; break;
-    }
-});
+// --- SHOOTING MECHANIC ---
+function shootCrossbow() {
+    if (inventory !== 'crossbow' || ammo <= 0 || tungTungKnockedOut) return;
 
-window.addEventListener('keyup', (e) => {
-    switch (e.code) {
-        case 'ArrowUp': case 'KeyW': moveForward = false; break;
-        case 'ArrowLeft': case 'KeyA': moveLeft = false; break;
-        case 'ArrowDown': case 'KeyS': moveBackward = false; break;
-        case 'ArrowRight': case 'KeyD': moveRight = false; break;
-        case 'ShiftLeft': case 'ShiftRight': isSprinting = false; break;
-    }
-});
+    ammo--;
+    uiAmmo.innerText = `Arrows: ${ammo}`;
 
-function setupMobileControls() {
-    if (!mobileEnabled) return;
+    // Play shoot sound (simple snap)
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.1);
+
+    // Raycast to see if we hit Tung Tung
+    raycaster.setFromCamera(screenCenter, camera);
+    const intersects = raycaster.intersectObjects(scene.children, true);
     
-    document.getElementById('joystick-move').classList.remove('hidden');
-    document.getElementById('joystick-look').classList.remove('hidden');
-    document.getElementById('mobile-interact').classList.remove('hidden');
-    document.getElementById('mobile-drop').classList.remove('hidden');
-
-    document.getElementById('mobile-interact').addEventListener('touchstart', performInteraction);
-    document.getElementById('mobile-drop').addEventListener('touchstart', dropItem);
-
-    const moveZone = document.getElementById('joystick-move');
-    const lookZone = document.getElementById('joystick-look');
-
-    moveZone.addEventListener('touchmove', (e) => {
-        e.preventDefault();
-        const touch = e.touches[0];
-        const rect = moveZone.getBoundingClientRect();
-        mobileMoveData.x = Math.max(-1, Math.min(1, (touch.clientX - (rect.left + rect.width/2)) / 40));
-        mobileMoveData.y = Math.max(-1, Math.min(1, (touch.clientY - (rect.top + rect.height/2)) / 40));
-    }, { passive: false });
-
-    moveZone.addEventListener('touchend', () => mobileMoveData = { x: 0, y: 0 });
-
-    lookZone.addEventListener('touchmove', (e) => {
-        e.preventDefault();
-        const touch = e.touches[0];
-        const rect = lookZone.getBoundingClientRect();
-        camera.rotation.y -= (touch.clientX - (rect.left + rect.width/2)) * lookSensitivity;
-        camera.rotation.x -= (touch.clientY - (rect.top + rect.height/2)) * lookSensitivity;
-        camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
-    }, { passive: false });
-}
-
-// --- TUNG TUNG SMART AI ---
-function updateTungTungAI(delta) {
-    if (!granny || isDead) return;
-
-    let targetPos = null;
-    let minDistance = Infinity;
-
-    // 1. PRIORITY: Investigate Noise!
-    if (window.noiseTarget && window.noiseTimer > 0) {
-        targetPos = window.noiseTarget;
-        window.noiseTimer -= delta;
-        if (granny.position.distanceTo(window.noiseTarget) < 1.5) window.noiseTarget = null;
-    } 
-    // 2. Hunt Players
-    else {
-        if (isMultiplayer) {
-            for (const [id, pMesh] of Object.entries(remotePlayers)) {
-                if (pMesh.userData.isHiding) continue; // Ignore hiding players
-                const dist = granny.position.distanceTo(pMesh.position);
-                if (dist < minDistance) { minDistance = dist; targetPos = pMesh.position; }
-            }
-            if (!isHiding) {
-                const dist = granny.position.distanceTo(camera.position);
-                if (dist < minDistance) { minDistance = dist; targetPos = camera.position; }
-            }
-        } else {
-            if (!isHiding) {
-                targetPos = camera.position;
-                minDistance = granny.position.distanceTo(camera.position);
-            }
-        }
-    }
-
-    // Move Tung Tung
-    if (targetPos) {
-        // Keep Tung Tung at the correct height (Basement vs Main Floor)
-        const targetY = targetPos.y < 0 ? -2.5 : 0; 
-        granny.position.y += (targetY - granny.position.y) * 5 * delta; // Smooth Y transition on ramps
-
-        const lookTarget = new THREE.Vector3(targetPos.x, granny.position.y, targetPos.z);
-        granny.lookAt(lookTarget);
+    for (let i = 0; i < intersects.length; i++) {
+        let obj = intersects[i].object;
+        let hitTungTung = false;
         
-        const speed = isMultiplayer ? 3.0 : 2.5;
-        granny.translateZ(speed * delta);
+        // Check if the hit object is part of the granny group
+        while (obj.parent && obj.parent.type !== 'Scene') {
+            if (obj === granny || obj.parent === granny) {
+                hitTungTung = true;
+                break;
+            }
+            obj = obj.parent;
+        }
 
-        if (targetPos === camera.position && minDistance < 1.2 && !isHiding) {
-            triggerDeath();
+        if (hitTungTung) {
+            triggerTungTungKnockout();
+            if (isMultiplayer) socket.emit('shootTungTung');
+            break; // Stop raycast after hitting him
+        } else if (collidableObjects.includes(obj)) {
+            break; // Hit a wall first, arrow blocked!
         }
     }
 }
 
-// --- DEATH & RESPAWN ---
-function triggerDeath() {
-    if (isDead) return;
-    isDead = true; lives--; currentDay++;
-    if (isMultiplayer) socket.emit('playerDied');
-
-    camera.lookAt(granny.position);
-    uiGame.classList.add('hidden');
-    uiDeath.classList.remove('hidden');
+function triggerTungTungKnockout() {
+    if (!granny || tungTungKnockedOut) return;
     
-    if (lives > 0) {
-        uiDayText.innerText = `DAY ${currentDay}`;
-        setTimeout(respawnPlayer, 3000);
-    } else {
-        uiDayText.innerText = "GAME OVER";
-        uiDayText.style.color = "#ff0000";
-        if (!isMultiplayer) setTimeout(() => location.reload(), 3000);
-    }
-}
+    tungTungKnockedOut = true;
+    tungTungKnockoutTimer = 90.0; // 1 minute 30 seconds!
 
-function respawnPlayer() {
-    isDead = false; isHiding = false;
-    uiDeath.classList.add('hidden');
-    uiGame.classList.remove('hidden');
-    uiLives.innerText = `Lives: ${lives}`;
-    camera.position.set(0, 1.7, 0);
-    camera.rotation.set(0, 0, 0);
-    if (granny && !isMultiplayer) granny.position.set(0, 0, 15);
-}
-
-function winGame() {
-    alert("ESCAPE SUCCESSFUL! You unlocked the door!");
-    location.reload();
+    // Ragdoll effect (fall over)
+    granny.rotation.x = -Math.PI / 2;
+    granny.position.y = 0.5; // Lower to ground
 }
 
 // --- MULTIPLAYER SYNC ---
@@ -702,6 +684,11 @@ function connectToServer(username) {
         window.noiseTimer = 8.0;
     });
 
+    // NEW: Sync Knockout
+    socket.on('tungTungKnockedOut', () => {
+        triggerTungTungKnockout();
+    });
+
     socket.on('playerLeft', (id) => { if (remotePlayers[id]) { scene.remove(remotePlayers[id]); delete remotePlayers[id]; }});
     socket.on('playerEliminated', (id) => { if (remotePlayers[id]) { scene.remove(remotePlayers[id]); delete remotePlayers[id]; }});
     
@@ -716,82 +703,13 @@ function connectToServer(username) {
     socket.on('puzzleUpdate', (data) => {
         const mesh = scene.getObjectByName(`OBSTACLE_${data.obstacleId}`);
         if (mesh) mesh.visible = false;
+        
+        // If weapons case opened by someone else, show crossbow
+        if (data.obstacleId === 'weaponsCase') {
+            itemMeshes['crossbow'].visible = true;
+        }
     });
 
     socket.on('gameWon', (winnerName) => { alert(`ESCAPE SUCCESSFUL! ${winnerName} unlocked the door!`); location.reload(); });
     socket.on('gameOverAll', () => { alert(`TUNG TUNG SAHUR KILLED EVERYONE. Game Over.`); location.reload(); });
-}
-
-// --- MAIN ANIMATION LOOP ---
-function animate() {
-    requestAnimationFrame(animate);
-    const time = performance.now();
-    const delta = (time - prevTime) / 1000;
-    prevTime = time;
-
-    if (!isDead && (controls.isLocked || mobileEnabled)) {
-        checkInteractions();
-
-        if (!isHiding) {
-            velocity.x -= velocity.x * 10.0 * delta;
-            velocity.z -= velocity.z * 10.0 * delta;
-
-            direction.z = Number(moveForward) - Number(moveBackward);
-            direction.x = Number(moveRight) - Number(moveLeft);
-            direction.normalize();
-
-            if (mobileEnabled) { direction.x += mobileMoveData.x; direction.z -= mobileMoveData.y; }
-
-            const currentSpeed = isSprinting ? 60.0 : 30.0;
-            if (moveForward || moveBackward || mobileMoveData.y !== 0) velocity.z -= direction.z * currentSpeed * delta;
-            if (moveLeft || moveRight || mobileMoveData.x !== 0) velocity.x -= direction.x * currentSpeed * delta;
-
-            controls.moveRight(-velocity.x * delta);
-            controls.moveForward(-velocity.z * delta);
-
-            // --- BASEMENT RAMP PHYSICS ---
-            // If player is in the ramp area (x: 13 to 17, z: -9 to -21)
-            if (camera.position.x > 13 && camera.position.x < 17 && camera.position.z < -9 && camera.position.z > -21) {
-                // Interpolate height based on Z position
-                const rampProgress = (camera.position.z + 9) / -12; // 0 at top, 1 at bottom
-                camera.position.y = 1.7 - (rampProgress * 4.0); // 1.7 down to -2.3
-            } 
-            // If player is fully in the basement (z < -21)
-            else if (camera.position.z <= -21 && camera.position.x > 5) {
-                camera.position.y = -2.3; // Basement head height
-            } 
-            // Normal floor
-            else {
-                camera.position.y = 1.7;
-            }
-        }
-
-        updateTungTungAI(delta);
-
-        if (isMultiplayer && socket && socket.connected) {
-            socket.emit('move', { pos: camera.position, rot: camera.rotation.y });
-        }
-    }
-
-    renderer.render(scene, camera);
-}
-
-// --- PAUSE MENU LOGIC ---
-document.getElementById('pause-btn').addEventListener('click', () => {
-    if (!isMultiplayer && !mobileEnabled) controls.unlock();
-    uiPause.classList.remove('hidden');
-});
-
-document.getElementById('btn-resume').addEventListener('click', () => {
-    uiPause.classList.add('hidden');
-    if (!isMultiplayer && !mobileEnabled) controls.lock();
-});
-
-document.getElementById('btn-leave').addEventListener('click', () => location.reload());
-
-if (controls) {
-    controls.addEventListener('lock', () => uiPause.classList.add('hidden'));
-    controls.addEventListener('unlock', () => {
-        if (!isDead && uiMainMenu.classList.contains('hidden')) uiPause.classList.remove('hidden');
-    });
 }
