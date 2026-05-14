@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- MAIN MENU -->
     <div id="main-menu" class="ui-layer">
         <h1 class="title">TUNG TUNG TUNG SAHORROR</h1>
         <p class="subtitle">Escape House 3D Granny</p>
@@ -19,7 +18,6 @@
         </div>
     </div>
 
-    <!-- SETTINGS MENU -->
     <div id="settings-menu" class="ui-layer hidden">
         <h2>SETTINGS</h2>
         <div class="settings-box">
@@ -34,7 +32,6 @@
         </div>
     </div>
 
-    <!-- PAUSE MENU -->
     <div id="pause-menu" class="ui-layer hidden">
         <h2>PAUSED</h2>
         <div class="menu-box">
@@ -43,35 +40,29 @@
         </div>
     </div>
 
-    <!-- DEATH SCREEN -->
     <div id="death-screen" class="ui-layer hidden">
         <h1 id="day-text">DAY 2</h1>
         <p id="death-subtext">Tung Tung Sahur caught you...</p>
     </div>
 
-    <!-- GAME HUD -->
     <div id="game-ui" class="hidden">
         <div id="pause-btn">||</div>
         <div id="lives-display">Lives: 5</div>
+        <div id="ammo-display" class="hidden">Arrows: 3</div>
         <div id="crosshair">+</div>
         <div id="interact-prompt"></div>
         <div id="inventory-display">Holding: Nothing</div>
         
-        <!-- Mobile Controls -->
         <div id="joystick-move" class="joystick hidden"><div class="knob"></div></div>
         <div id="joystick-look" class="joystick hidden"><div class="knob"></div></div>
         <div id="mobile-interact" class="mobile-btn hidden">HAND</div>
         <div id="mobile-drop" class="mobile-btn hidden">DROP</div>
+        <div id="mobile-shoot" class="mobile-btn hidden" style="background: rgba(255,0,0,0.4);">SHOOT</div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
-            }
-        }
+        { "imports": { "three": "https://unpkg.com/three@0.150.1/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/" } }
     </script>
     <script type="module" src="client.js"></script>
 </body>
