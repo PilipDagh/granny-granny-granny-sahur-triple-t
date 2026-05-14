@@ -12,23 +12,35 @@ const MAX_PLAYERS = 50;
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// --- 5 ITEM PRESETS (Granny Style) ---
+const PRESETS = [
+    { hammer: {x: 15, y: -3.5, z: -25}, pliers: {x: 12, y: 0.5, z: 5}, master_key: {x: 0, y: 8.5, z: 0}, weapons_key: {x: -3, y: 0.5, z: 8}, gas_can: {x: 25, y: -3.5, z: -25}, car_key: {x: 5, y: 8.5, z: 5}, battery: {x: 10, y: 0.5, z: -5} },
+    { hammer: {x: 0, y: 8.5, z: 0}, pliers: {x: 15, y: -3.5, z: -25}, master_key: {x: 12, y: 0.5, z: 5}, weapons_key: {x: 25, y: -3.5, z: -25}, gas_can: {x: -3, y: 0.5, z: 8}, car_key: {x: 10, y: 0.5, z: -5}, battery: {x: 5, y: 8.5, z: 5} },
+    { hammer: {x: 12, y: 0.5, z: 5}, pliers: {x: 0, y: 8.5, z: 0}, master_key: {x: 15, y: -3.5, z: -25}, weapons_key: {x: 5, y: 8.5, z: 5}, gas_can: {x: 10, y: 0.5, z: -5}, car_key: {x: 25, y: -3.5, z: -25}, battery: {x: -3, y: 0.5, z: 8} },
+    { hammer: {x: 25, y: -3.5, z: -25}, pliers: {x: -3, y: 0.5, z: 8}, master_key: {x: 10, y: 0.5, z: -5}, weapons_key: {x: 12, y: 0.5, z: 5}, gas_can: {x: 5, y: 8.5, z: 5}, car_key: {x: 15, y: -3.5, z: -25}, battery: {x: 0, y: 8.5, z: 0} },
+    { hammer: {x: 5, y: 8.5, z: 5}, pliers: {x: 10, y: 0.5, z: -5}, master_key: {x: -3, y: 0.5, z: 8}, weapons_key: {x: 0, y: 8.5, z: 0}, gas_can: {x: 15, y: -3.5, z: -25}, car_key: {x: 12, y: 0.5, z: 5}, battery: {x: 25, y: -3.5, z: -25} }
+];
+
+let currentPresetIndex = Math.floor(Math.random() * PRESETS.length);
 let players = {};
-let gameState = {
-    items: {
-        'hammer': { pos: {x: 15, y: -3.5, z: -25}, holder: null, visible: true },
-        'pliers': { pos: {x: 12, y: 0.5, z: 5}, holder: null, visible: true },
-        'master_key': { pos: {x: 0, y: 4.5, z: 0}, holder: null, visible: true },
-        // NEW: Weapons Key and Crossbow
-        'weapons_key': { pos: {x: -3, y: 0.5, z: 8}, holder: null, visible: true },
-        'crossbow': { pos: {x: 22, y: 0.5, z: 8}, holder: null, visible: false } // Hidden in case initially
-    },
-    puzzles: {
-        'barricade': { solved: false },
-        'circuitBox': { solved: false },
-        'mainDoor': { solved: false },
-        'weaponsCase': { solved: false } // NEW: Weapons Case
-    }
-};
+let gameState = { items: {}, puzzles: {}, carParts: { gas: false, battery: false, key: false } };
+
+function loadPreset() {
+    const p = PRESETS[currentPresetIndex];
+    gameState.items = {
+        'hammer': { pos: p.hammer, holder: null, visible: true },
+        'pliers': { pos: p.pliers, holder: null, visible: true },
+        'master_key': { pos: p.master_key, holder: null, visible: true },
+        'weapons_key': { pos: p.weapons_key, holder: null, visible: true },
+        'crossbow': { pos: {x: 22, y: 0.5, z: 8}, holder: null, visible: false },
+        'gas_can': { pos: p.gas_can, holder: null, visible: true },
+        'car_key': { pos: p.car_key, holder: null, visible: true },
+        'battery': { pos: p.battery, holder: null, visible: true }
+    };
+    gameState.puzzles = { 'barricade': { solved: false }, 'circuitBox': { solved: false }, 'mainDoor': { solved: false }, 'weaponsCase': { solved: false } };
+    gameState.carParts = { gas: false, battery: false, key: false };
+}
+loadPreset();
 
 io.on('connection', (socket) => {
     if (Object.keys(players).length >= MAX_PLAYERS) {
@@ -37,12 +49,28 @@ io.on('connection', (socket) => {
         return;
     }
 
-    players[socket.id] = { id: socket.id, username: 'Guest-' + Math.floor(Math.random() * 9000000), pos: { x: 0, y: 1.7, z: 0 }, rot: 0, lives: 5, isDead: false, isHiding: false };
+    // 0.67% Chance for Domain Expansion!
+    const hasDomain = Math.random() < 0.0067;
 
-    socket.emit('init', { id: socket.id, players, gameState });
+    players[socket.id] = { 
+        id: socket.id, username: 'Guest-' + Math.floor(Math.random() * 9000000), 
+        pos: { x: 0, y: 9.7, z: 0 }, // Spawn UPSTAIRS
+        rot: 0, lives: 5, isDead: false, isHiding: false, hasDomain: hasDomain,
+        customization: { hair: '#000000', clothes: '#2244aa', skin: '#ffccaa', pants: '#111111', shoes: '#333333' }
+    };
+
+    socket.emit('init', { id: socket.id, players, gameState, presetIndex: currentPresetIndex });
     socket.broadcast.emit('playerJoined', players[socket.id]);
 
     socket.on('setUsername', (name) => { if (name.trim().length > 0) players[socket.id].username = name.trim(); });
+
+    // Customization Sync
+    socket.on('updateCustomization', (colors) => {
+        if (players[socket.id]) {
+            players[socket.id].customization = colors;
+            io.emit('playerCustomized', { id: socket.id, colors: colors });
+        }
+    });
 
     socket.on('move', (data) => {
         if (players[socket.id] && !players[socket.id].isDead) {
@@ -60,10 +88,13 @@ io.on('connection', (socket) => {
     });
 
     socket.on('makeNoise', (pos) => io.emit('noiseMade', pos));
+    socket.on('shootTungTung', () => io.emit('tungTungKnockedOut'));
 
-    // NEW: Sync Tung Tung getting shot!
-    socket.on('shootTungTung', () => {
-        io.emit('tungTungKnockedOut');
+    // Domain Expansion Sync
+    socket.on('activateDomain', (pos) => {
+        if (players[socket.id] && players[socket.id].hasDomain) {
+            io.emit('domainActivated', { id: socket.id, pos: pos });
+        }
     });
 
     socket.on('itemAction', (data) => {
@@ -79,17 +110,24 @@ io.on('connection', (socket) => {
         if (gameState.puzzles[data.obstacleId]) {
             gameState.puzzles[data.obstacleId].solved = true;
             io.emit('puzzleUpdate', { obstacleId: data.obstacleId });
-            
-            // If weapons case is opened, spawn the crossbow!
             if (data.obstacleId === 'weaponsCase') {
                 gameState.items['crossbow'].visible = true;
                 io.emit('itemUpdate', { itemId: 'crossbow', itemState: gameState.items['crossbow'] });
             }
-
             if (data.obstacleId === 'mainDoor') {
-                io.emit('gameWon', players[socket.id].username);
+                io.emit('gameWon', { winner: players[socket.id].username, type: 'Front Door' });
                 resetServerState();
             }
+        }
+    });
+
+    // Car Escape Logic
+    socket.on('carPartAdded', (part) => {
+        gameState.carParts[part] = true;
+        io.emit('carUpdate', gameState.carParts);
+        if (gameState.carParts.gas && gameState.carParts.battery && gameState.carParts.key) {
+            io.emit('gameWon', { winner: players[socket.id].username, type: 'Car' });
+            resetServerState();
         }
     });
 
@@ -114,10 +152,10 @@ io.on('connection', (socket) => {
 });
 
 function resetServerState() {
-    Object.keys(gameState.puzzles).forEach(k => gameState.puzzles[k].solved = false);
-    Object.keys(gameState.items).forEach(k => { gameState.items[k].holder = null; gameState.items[k].visible = (k !== 'crossbow'); });
+    currentPresetIndex = Math.floor(Math.random() * PRESETS.length);
+    loadPreset();
     Object.keys(players).forEach(k => { players[k].lives = 5; players[k].isDead = false; players[k].isHiding = false; });
-    io.emit('serverReset', gameState);
+    io.emit('serverReset', { gameState, presetIndex: currentPresetIndex });
 }
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
