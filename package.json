@@ -1,6 +1,6 @@
 {
-  "name": "tung-tung-sahorror-multiplayer",
-  "version": "1.1.0",
+  "name": "tung-tung-sahorror",
+  "version": "1.0.0",
   "description": "Tung Tung Tung Sahorror: Escape House 3D Granny Multiplayer",
   "main": "server.js",
   "scripts": {
