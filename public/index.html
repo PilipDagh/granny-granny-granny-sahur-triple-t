@@ -21,14 +21,28 @@
     <div id="settings-menu" class="ui-layer hidden">
         <h2>SETTINGS</h2>
         <div class="settings-box">
-            <label>Look Sensitivity: <span id="sens-val">5</span></label>
-            <input type="range" id="sensitivity" min="1" max="10" value="5">
+            <label>Look Sensitivity: <span id="sens-val">0.0005</span></label>
+            <input type="range" id="sensitivity" min="1" max="50" value="5">
             <br><br>
             <label class="checkbox-container">Enable Mobile Controls
                 <input type="checkbox" id="mobile-toggle">
             </label>
             <br><br>
             <button id="btn-back-settings">Back to Menu</button>
+        </div>
+    </div>
+
+    <!-- WARDROBE MENU -->
+    <div id="wardrobe-menu" class="ui-layer hidden">
+        <h2>CUSTOMIZE CHARACTER</h2>
+        <div class="settings-box">
+            <label>Hair: <input type="color" id="color-hair" value="#000000"></label>
+            <label>Skin: <input type="color" id="color-skin" value="#ffccaa"></label>
+            <label>Shirt: <input type="color" id="color-clothes" value="#2244aa"></label>
+            <label>Pants: <input type="color" id="color-pants" value="#111111"></label>
+            <label>Shoes: <input type="color" id="color-shoes" value="#333333"></label>
+            <br>
+            <button id="btn-save-wardrobe">Save & Exit</button>
         </div>
     </div>
 
@@ -49,6 +63,7 @@
         <div id="pause-btn">||</div>
         <div id="lives-display">Lives: 5</div>
         <div id="ammo-display" class="hidden">Arrows: 3</div>
+        <div id="domain-display" class="hidden">DOMAIN EXPANSION: READY (Press J)</div>
         <div id="crosshair">+</div>
         <div id="interact-prompt"></div>
         <div id="inventory-display">Holding: Nothing</div>
@@ -58,6 +73,7 @@
         <div id="mobile-interact" class="mobile-btn hidden">HAND</div>
         <div id="mobile-drop" class="mobile-btn hidden">DROP</div>
         <div id="mobile-shoot" class="mobile-btn hidden" style="background: rgba(255,0,0,0.4);">SHOOT</div>
+        <div id="mobile-domain" class="mobile-btn hidden" style="background: rgba(150,0,255,0.4); bottom: 350px; right: 40px;">DOMAIN</div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
