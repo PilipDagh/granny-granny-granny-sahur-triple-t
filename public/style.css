@@ -69,3 +69,12 @@ button:hover { background: #5c4033; box-shadow: 0 0 10px #ff3333; }
 
 #death-screen { background: #000; transition: opacity 2s; }
 #day-text { font-size: 5rem; color: #fff; text-shadow: none; }
+/* Ammo Display */
+#ammo-display {
+    position: absolute; top: 60px; right: 20px;
+    color: #00ff00; font-size: 20px; font-weight: bold;
+    background: rgba(0,0,0,0.5); padding: 10px; border: 1px solid #00ff00;
+}
+
+/* Shoot Button Position */
+#mobile-shoot { bottom: 270px; right: 40px; border-color: #ff0000; }
