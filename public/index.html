@@ -28,7 +28,6 @@
             <br><br>
             <label class="checkbox-container">Enable Mobile Controls
                 <input type="checkbox" id="mobile-toggle">
-                <span class="checkmark"></span>
             </label>
             <br><br>
             <button id="btn-back-settings">Back to Menu</button>
@@ -59,17 +58,12 @@
         <div id="inventory-display">Holding: Nothing</div>
         
         <!-- Mobile Controls -->
-        <div id="joystick-move" class="joystick hidden">
-            <div class="knob"></div>
-        </div>
-        <div id="joystick-look" class="joystick hidden">
-            <div class="knob"></div>
-        </div>
+        <div id="joystick-move" class="joystick hidden"><div class="knob"></div></div>
+        <div id="joystick-look" class="joystick hidden"><div class="knob"></div></div>
         <div id="mobile-interact" class="mobile-btn hidden">HAND</div>
         <div id="mobile-drop" class="mobile-btn hidden">DROP</div>
     </div>
 
-    <!-- Scripts -->
     <script src="/socket.io/socket.io.js"></script>
     <script type="importmap">
         {
