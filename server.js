@@ -17,7 +17,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 let players = {};
 let gameState = {
     items: {
-        'hammer': { pos: {x: -8, y: 0.5, z: -12}, holder: null, visible: true },
+        'hammer': { pos: {x: 15, y: -3.5, z: -25}, holder: null, visible: true },
         'pliers': { pos: {x: 12, y: 0.5, z: 5}, holder: null, visible: true },
         'master_key': { pos: {x: 0, y: 4.5, z: 0}, holder: null, visible: true }
     },
@@ -71,6 +71,24 @@ io.on('connection', (socket) => {
             socket.broadcast.emit('playerMoved', { id: socket.id, pos: data.pos, rot: data.rot });
         }
     });
+    // --- ADD THESE TO server.js INSIDE io.on('connection') ---
+    
+    // Sync Hiding Status
+    socket.on('setHiding', (isHiding) => {
+        if (players[socket.id]) {
+            players[socket.id].isHiding = isHiding;
+            socket.broadcast.emit('playerHiding', { id: socket.id, isHiding: isHiding });
+        }
+    });
+
+    // Sync Noise Distractions
+    socket.on('makeNoise', (pos) => {
+        io.emit('noiseMade', pos); // Tell ALL players that a noise happened here
+    });
+
+    // CHANGE THE HAMMER SPAWN LOCATION TO THE BASEMENT
+    // Find gameState.items in server.js and change the hammer's pos to:
+    // 
 
     // Sync Item Pickups / Drops
     socket.on('itemAction', (data) => {
