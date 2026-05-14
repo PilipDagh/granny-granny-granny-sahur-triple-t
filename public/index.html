@@ -1,52 +1,75 @@
- <!DOCTYPE html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-    <title>Tung Tung Tung Sahorror</title>
-    <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tung Tung Tung Sahorror: Escape House 3D</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Main Menu -->
-    <div id="main-menu">
-        <h1>Tung Tung Tung Sahorror</h1>
+    <!-- MAIN MENU -->
+    <div id="main-menu" class="ui-layer">
+        <h1 class="title">TUNG TUNG TUNG SAHORROR</h1>
+        <p class="subtitle">Escape House 3D Granny</p>
         <div class="menu-box">
-            <input type="text" id="username-input" placeholder="Enter Username...">
+            <input type="text" id="username-input" placeholder="Enter Username (Optional)" maxlength="15">
             <button id="btn-singleplayer">Play Single Player</button>
-            <button id="btn-multiplayer">Join Public Server</button>
+            <button id="btn-multiplayer">Join Public Server (50 Max)</button>
             <button id="btn-settings">Settings</button>
         </div>
     </div>
 
-    <!-- Settings Menu -->
-    <div id="settings-menu" class="hidden">
-        <h2>Settings</h2>
-        <label>Sensitivity: <input type="range" id="sensitivity" min="1" max="10" value="5"></label>
-        <br>
-        <label>Mobile Controls: <input type="checkbox" id="mobile-toggle"></label>
-        <br>
-        <button id="btn-back">Back</button>
+    <!-- SETTINGS MENU -->
+    <div id="settings-menu" class="ui-layer hidden">
+        <h2>SETTINGS</h2>
+        <div class="settings-box">
+            <label>Look Sensitivity: <span id="sens-val">5</span></label>
+            <input type="range" id="sensitivity" min="1" max="10" value="5">
+            <br><br>
+            <label class="checkbox-container">Enable Mobile Controls
+                <input type="checkbox" id="mobile-toggle">
+                <span class="checkmark"></span>
+            </label>
+            <br><br>
+            <button id="btn-back-settings">Back to Menu</button>
+        </div>
     </div>
 
-    <!-- Game HUD -->
+    <!-- PAUSE MENU -->
+    <div id="pause-menu" class="ui-layer hidden">
+        <h2>PAUSED</h2>
+        <div class="menu-box">
+            <button id="btn-resume">Resume</button>
+            <button id="btn-leave">Leave Game</button>
+        </div>
+    </div>
+
+    <!-- DEATH SCREEN -->
+    <div id="death-screen" class="ui-layer hidden">
+        <h1 id="day-text">DAY 2</h1>
+        <p id="death-subtext">Tung Tung Sahur caught you...</p>
+    </div>
+
+    <!-- GAME HUD -->
     <div id="game-ui" class="hidden">
         <div id="pause-btn">||</div>
         <div id="lives-display">Lives: 5</div>
         <div id="crosshair">+</div>
+        <div id="interact-prompt"></div>
+        <div id="inventory-display">Holding: Nothing</div>
         
-        <!-- Mobile Joysticks -->
-        <div id="joystick-move" class="joystick hidden"></div>
-        <div id="joystick-look" class="joystick hidden"></div>
-        
-        <div id="interact-prompt">Press E to interact</div>
+        <!-- Mobile Controls -->
+        <div id="joystick-move" class="joystick hidden">
+            <div class="knob"></div>
+        </div>
+        <div id="joystick-look" class="joystick hidden">
+            <div class="knob"></div>
+        </div>
+        <div id="mobile-interact" class="mobile-btn hidden">HAND</div>
+        <div id="mobile-drop" class="mobile-btn hidden">DROP</div>
     </div>
 
-    <!-- Pause Menu -->
-    <div id="pause-menu" class="hidden">
-        <h2>Paused</h2>
-        <button id="btn-resume">Resume</button>
-        <button id="btn-exit">Exit to Menu</button>
-    </div>
-
+    <!-- Scripts -->
     <script src="/socket.io/socket.io.js"></script>
     <script type="importmap">
         {
