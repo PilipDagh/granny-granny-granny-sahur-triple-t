@@ -9,12 +9,13 @@ body, html {
 
 .hidden { display: none !important; }
 
-/* UI Layers */
+/* UI Layers - Pointer Events Auto ensures buttons click! */
 .ui-layer {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(10, 5, 5, 0.95);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     z-index: 100; color: #ff3333; text-align: center;
+    pointer-events: auto; 
 }
 
 .title { font-family: 'Creepster', cursive; font-size: 4rem; margin-bottom: 0; text-shadow: 3px 3px 10px #ff0000; }
@@ -36,11 +37,11 @@ button {
     padding: 15px; background: #3d2b22; color: #fff;
     border: 2px solid #5c4033; cursor: pointer;
     font-family: 'Courier Prime', monospace; font-weight: bold; font-size: 1.1rem;
-    transition: 0.2s;
+    transition: 0.2s; pointer-events: auto;
 }
 button:hover { background: #5c4033; box-shadow: 0 0 10px #ff3333; }
 
-/* Game HUD */
+/* Game HUD - Pointer Events NONE so you can click the 3D world behind it */
 #game-ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
 #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255,255,255,0.7); font-size: 24px; }
 #pause-btn { position: absolute; top: 20px; left: 20px; pointer-events: auto; color: #fff; font-size: 24px; font-weight: bold; cursor: pointer; background: rgba(0,0,0,0.5); padding: 10px; border: 1px solid #5c4033; }
@@ -66,6 +67,5 @@ button:hover { background: #5c4033; box-shadow: 0 0 10px #ff3333; }
 #mobile-interact { bottom: 190px; right: 40px; }
 #mobile-drop { bottom: 190px; right: 120px; }
 
-/* Death Screen */
 #death-screen { background: #000; transition: opacity 2s; }
 #day-text { font-size: 5rem; color: #fff; text-shadow: none; }
