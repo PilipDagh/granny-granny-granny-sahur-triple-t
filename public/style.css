@@ -95,3 +95,9 @@ input[type="color"] {
     display: flex; justify-content: space-between; align-items: center;
     width: 100%; font-size: 1.2rem; color: #fff;
 }
+/* Ammo Display */
+#ammo-display {
+    position: absolute; top: 60px; right: 20px;
+    color: #ffaa00; font-size: 20px; font-weight: bold;
+    background: rgba(0,0,0,0.5); padding: 10px; border: 1px solid #ffaa00;
+}
