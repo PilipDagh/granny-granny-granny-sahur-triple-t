@@ -12,14 +12,14 @@ const MAX_PLAYERS = 50;
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- ITEM PRESETS (Granny Style) ---
+// --- ITEM PRESETS ---
 const PRESETS = [
     { hammer: {x: 15, y: -3.5, z: -25}, pliers: {x: 12, y: 0.5, z: 5}, master_key: {x: 0, y: 8.5, z: 0}, weapons_key: {x: -3, y: 0.5, z: 8}, gas_can: {x: 25, y: -3.5, z: -25}, car_key: {x: 5, y: 8.5, z: 5}, battery: {x: 10, y: 0.5, z: -5} }
 ];
 
 let currentPresetIndex = 0;
 let players = {};
-let gameState = { items: {}, puzzles: {}, carParts: { gas: false, battery: false, key: false } };
+let gameState = { items: {}, puzzles: {}, carParts: { gas: false, battery: false, key: false }, doors: {} };
 
 function loadPreset() {
     const p = PRESETS[currentPresetIndex];
@@ -28,7 +28,7 @@ function loadPreset() {
         'pliers': { pos: p.pliers, holder: null, visible: true },
         'master_key': { pos: p.master_key, holder: null, visible: true },
         'weapons_key': { pos: p.weapons_key, holder: null, visible: true },
-        'crossbow': { pos: {x: 22, y: 1.5, z: 8}, holder: null, visible: false }, // Inside wall box
+        'crossbow': { pos: {x: 22, y: 1.5, z: 8}, holder: null, visible: false },
         'arrow_1': { pos: {x: 22.2, y: 1.5, z: 8}, holder: null, visible: false },
         'arrow_2': { pos: {x: 22.4, y: 1.5, z: 8}, holder: null, visible: false },
         'arrow_3': { pos: {x: 22.6, y: 1.5, z: 8}, holder: null, visible: false },
@@ -37,12 +37,16 @@ function loadPreset() {
         'battery': { pos: p.battery, holder: null, visible: true }
     };
     gameState.puzzles = { 
-        'barricade': { solved: false }, 
-        'circuitBox': { solved: false }, 
-        'mainDoor': { solved: false }, 
-        'weaponsCase': { solved: false, isOpen: false } // Wall mounted box
+        'barricade': { solved: false }, 'circuitBox': { solved: false }, 'mainDoor': { solved: false }, 'weaponsCase': { solved: false, isOpen: false } 
     };
     gameState.carParts = { gas: false, battery: false, key: false };
+    
+    // NEW: Door States (False = Closed, True = Open)
+    gameState.doors = {
+        'bedroom': false,
+        'weapons_room': false,
+        'basement_top': false
+    };
 }
 loadPreset();
 
@@ -57,7 +61,8 @@ io.on('connection', (socket) => {
 
     players[socket.id] = { 
         id: socket.id, username: 'Guest-' + Math.floor(Math.random() * 9000000), 
-        pos: { x: 0, y: 9.7, z: 0 }, rot: 0, lives: 5, isDead: false, isHiding: false, isCrouching: false, hasDomain: hasDomain,
+        pos: { x: 0, y: 9.7, z: 2 }, // Spawn slightly offset to prevent wall clipping
+        rot: 0, lives: 5, isDead: false, isHiding: false, isCrouching: false, hasDomain: hasDomain,
         customization: { hair: '#000000', clothes: '#2244aa', skin: '#ffccaa', pants: '#111111', shoes: '#333333' }
     };
 
@@ -81,6 +86,14 @@ io.on('connection', (socket) => {
     socket.on('shootTungTung', () => io.emit('tungTungKnockedOut'));
     socket.on('activateDomain', (pos) => { if (players[socket.id] && players[socket.id].hasDomain) io.emit('domainActivated', { id: socket.id, pos: pos }); });
 
+    // NEW: Sync Doors
+    socket.on('toggleDoor', (data) => {
+        if (gameState.doors[data.id] !== undefined) {
+            gameState.doors[data.id] = data.isOpen;
+            io.emit('doorToggled', data);
+        }
+    });
+
     socket.on('itemAction', (data) => {
         const item = gameState.items[data.itemId];
         if (item) {
@@ -95,7 +108,6 @@ io.on('connection', (socket) => {
             gameState.puzzles[data.obstacleId].solved = true;
             io.emit('puzzleUpdate', { obstacleId: data.obstacleId });
             
-            // Open weapons case and reveal crossbow + arrows
             if (data.obstacleId === 'weaponsCase') {
                 gameState.puzzles['weaponsCase'].isOpen = true;
                 gameState.items['crossbow'].visible = true;
