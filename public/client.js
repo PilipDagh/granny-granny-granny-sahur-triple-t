@@ -190,7 +190,7 @@ document.getElementById('btn-save-wardrobe').addEventListener('click', () => {
 document.getElementById('btn-singleplayer').addEventListener('click', () => startGame(false));
 document.getElementById('btn-multiplayer').addEventListener('click', () => startGame(true));
 
-function startGame(multi) {
+window.startGame = function(multi) {
     isMultiplayer = multi;
     const username = document.getElementById('username-input').value || 'Guest-' + Math.floor(Math.random() * 9000);
     uiMainMenu.classList.add('hidden'); uiGame.classList.remove('hidden');
