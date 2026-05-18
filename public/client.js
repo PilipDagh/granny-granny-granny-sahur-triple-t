@@ -10,10 +10,11 @@ let itemMeshes = {};
 let granny = null; 
 
 // Physics & Collision Arrays
-let collidableObjects = []; // Walls, doors, furniture
-let interactableObjects = []; // Paintings, Wardrobe
-let floorMeshes = []; // Floors and Ramps for smooth walking
-let physicsItems = []; // Items currently falling with gravity
+let collidableObjects = []; 
+let interactableObjects = []; 
+let floorMeshes = []; 
+let physicsItems = []; 
+let doors = {}; // NEW: Tracks all interactive doors
 
 // Player State
 let lives = 5;
@@ -22,11 +23,10 @@ let inventory = null;
 let currentDay = 1;
 let myCustomization = { hair: '#000000', clothes: '#2244aa', skin: '#ffccaa', pants: '#111111', shoes: '#333333' };
 
-// NEW: Advanced Mechanics State
+// Advanced Mechanics State
 let isCrouching = false;
-let isCrossbowLoaded = false;
-let loadedArrowId = null;
-let activeProjectiles = []; // Fired arrows
+let ammo = 3;
+let activeProjectiles = []; 
 
 // Stealth, Distraction & Domain State
 let isHiding = false;
@@ -40,7 +40,7 @@ let domainActive = false;
 let tungTungKnockedOut = false;
 let tungTungKnockoutTimer = 0;
 let isKillingPlayer = false; 
-let tungTungState = 'patrol'; // 'patrol', 'investigate', 'chase', 'lookAround'
+let tungTungState = 'patrol'; 
 let tungTungWaitTimer = 0;
 
 // Movement & Mobile State
@@ -54,7 +54,6 @@ let lookSensitivity = 0.0005;
 let mobileMoveData = { x: 0, y: 0 };
 let moveTouchId = null, lookTouchId = null, lastLookX = 0, lastLookY = 0;
 
-// Floor Raycaster (For smooth stairs)
 const floorRaycaster = new THREE.Raycaster();
 const downVector = new THREE.Vector3(0, -1, 0);
 
@@ -93,11 +92,13 @@ function createWoodTexture(baseColor, lineColor) {
 
 const wallTexture = createWoodTexture('#4a3525', '#2a1a10'); 
 const floorTexture = createWoodTexture('#2a1c12', '#0a0502');
+const doorTexture = createWoodTexture('#5c3a21', '#3a2010'); // Slightly different wood for doors
 floorTexture.repeat.set(4, 4);
 
 const wallMaterial = new THREE.MeshStandardMaterial({ map: wallTexture, roughness: 0.9 });
 const floorMaterial = new THREE.MeshStandardMaterial({ map: floorTexture, roughness: 0.8 });
-const ceilingMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 1.0 }); // Solid dark ceilings
+const ceilingMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 1.0 }); 
+const doorMaterial = new THREE.MeshStandardMaterial({ map: doorTexture, roughness: 0.8 });
 
 // --- WEB AUDIO API: SCARY TUNG TUNG ---
 const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -141,14 +142,15 @@ setInterval(() => {
     }
 }, 2500);
 
-// --- ENGINE INITIALIZATION ---
+// --- ENGINE INITIALIZATION (BLANK SCREEN FIX) ---
 function initEngine() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0a0a);
-    scene.fog = new THREE.FogExp2(0x0a0a0a, 0.035); 
+    scene.fog = new THREE.FogExp2(0x0a0a0a, 0.030); // Slightly thinner fog
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 9.7, 0); 
+    // BLANK SCREEN FIX: Spawn at Z=2 instead of Z=0 to avoid clipping perfectly into the wall edge!
+    camera.position.set(0, 9.7, 2); 
     camera.rotation.order = 'YXZ'; 
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -159,11 +161,12 @@ function initEngine() {
 
     controls = new PointerLockControls(camera, document.body);
 
-    const flashlight = new THREE.SpotLight(0xffffff, 1.8, 35, Math.PI / 4, 0.5, 1); 
+    // BLANK SCREEN FIX: Brighter flashlight and ambient light
+    const flashlight = new THREE.SpotLight(0xffffff, 2.0, 40, Math.PI / 4, 0.5, 1); 
     flashlight.position.set(0, 0, 0); flashlight.target.position.set(0, 0, -1);
     camera.add(flashlight); camera.add(flashlight.target); scene.add(camera);
 
-    const ambientLight = new THREE.AmbientLight(0x555555); 
+    const ambientLight = new THREE.AmbientLight(0x666666); 
     scene.add(ambientLight);
 
     window.addEventListener('resize', () => {
@@ -200,7 +203,6 @@ function startGame(multi) {
         connectToServer(username); 
     } else {
         buildHouse();
-        // Single player mock preset
         const mockPreset = { items: {
             'hammer': { pos: {x: 15, y: -3.5, z: -25}, visible: true },
             'pliers': { pos: {x: 12, y: 0.5, z: 5}, visible: true },
@@ -222,7 +224,43 @@ function startGame(multi) {
     }
 }
 
-// --- UPGRADED MAP BUILDER (CEILINGS, VENTS, WEAPONS BOX) ---
+// --- NEW: INTERACTIVE DOOR BUILDER ---
+function createDoor(id, x, y, z, width, height, rotationY, swingDirection = 1) {
+    // We use a Group as a hinge/pivot point so the door swings naturally
+    const pivot = new THREE.Group();
+    pivot.position.set(x, y, z);
+    pivot.rotation.y = rotationY;
+    
+    // The actual door mesh is offset from the pivot
+    const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.2), doorMaterial);
+    doorMesh.position.set(width / 2, height / 2, 0); // Offset by half width
+    doorMesh.castShadow = true;
+    doorMesh.receiveShadow = true;
+    
+    // Add a simple doorknob
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshStandardMaterial({color: 0xaaaaaa}));
+    knob.position.set(width - 0.3, height / 2, 0.15);
+    doorMesh.add(knob);
+    
+    doorMesh.name = `INTERACT_door_${id}`;
+    pivot.add(doorMesh);
+    scene.add(pivot);
+    
+    // Add to interactables and collidables
+    interactableObjects.push(doorMesh);
+    collidableObjects.push(doorMesh);
+    
+    doors[id] = {
+        pivot: pivot,
+        isOpen: false,
+        closedRot: rotationY,
+        openRot: rotationY + (Math.PI / 2 * swingDirection),
+        currentRot: rotationY
+    };
+}
+// --- CONTINUING FROM PART 1 ---
+
+// --- MAP BUILDER HELPER FUNCTIONS ---
 function createWall(x, y, z, width, rotationY = 0, height = 4) {
     const wall = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.5), wallMaterial);
     wall.position.set(x, y + height/2, z); 
@@ -235,7 +273,7 @@ function createWall(x, y, z, width, rotationY = 0, height = 4) {
 function createFloor(x, y, z, width, depth) {
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), floorMaterial);
     floor.rotation.x = -Math.PI / 2; floor.position.set(x, y, z); floor.receiveShadow = true;
-    scene.add(floor); floorMeshes.push(floor); // Added to raycaster array!
+    scene.add(floor); floorMeshes.push(floor); 
     return floor;
 }
 
@@ -248,13 +286,11 @@ function createCeiling(x, y, z, width, depth) {
 function createRamp(x, y, z, width, depth, rotationX) {
     const ramp = new THREE.Mesh(new THREE.BoxGeometry(width, 0.5, depth), floorMaterial);
     ramp.position.set(x, y, z); ramp.rotation.x = rotationX;
-    scene.add(ramp); floorMeshes.push(ramp); // Raycaster will smoothly walk up this!
+    scene.add(ramp); floorMeshes.push(ramp); 
     return ramp;
 }
 
 function createVent(x, y, z, rotationY) {
-    // A vent is just a hole in the wall. We build walls AROUND the hole.
-    // Hole is 1.5 wide, 1.5 high.
     const ventGroup = new THREE.Group();
     const leftWall = new THREE.Mesh(new THREE.BoxGeometry(1.25, 4, 0.5), wallMaterial); leftWall.position.set(-1.375, 2, 0);
     const rightWall = new THREE.Mesh(new THREE.BoxGeometry(1.25, 4, 0.5), wallMaterial); rightWall.position.set(1.375, 2, 0);
@@ -264,29 +300,42 @@ function createVent(x, y, z, rotationY) {
     ventGroup.position.set(x, y, z); ventGroup.rotation.y = rotationY;
     scene.add(ventGroup);
     
-    // Add colliders individually
-    const boxL = new THREE.Box3().setFromObject(leftWall); collidableObjects.push(leftWall);
-    const boxR = new THREE.Box3().setFromObject(rightWall); collidableObjects.push(rightWall);
-    const boxT = new THREE.Box3().setFromObject(topWall); collidableObjects.push(topWall);
+    collidableObjects.push(leftWall, rightWall, topWall);
 }
-// --- CONTINUING FROM PART 1 ---
+
+function createPainting(x, y, z, rotationY) {
+    const paintingGroup = new THREE.Group();
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(2, 2.5, 0.1), new THREE.MeshStandardMaterial({color: 0x221100}));
+    const canvas = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.3), new THREE.MeshStandardMaterial({color: 0x888888}));
+    canvas.position.z = 0.06;
+    paintingGroup.add(frame, canvas);
+    
+    paintingGroup.position.set(x, y, z); paintingGroup.rotation.y = rotationY;
+    paintingGroup.name = "KNOCKABLE_painting"; paintingGroup.userData = { isKnocked: false };
+    
+    scene.add(paintingGroup); interactableObjects.push(paintingGroup);
+}
 
 function buildHouse() {
     collidableObjects = [];
     interactableObjects = [];
     floorMeshes = [];
+    doors = {}; // Reset doors
 
     // ==========================================
     // 1. UPSTAIRS (Y = 8)
     // ==========================================
     createFloor(0, 8, 0, 40, 40);
-    createCeiling(0, 12, 0, 40, 40); // Solid Roof
+    createCeiling(0, 12, 0, 40, 40); 
 
     // Bedroom (Spawn)
-    createWall(0, 8, -5, 10); 
-    createWall(-5, 8, 0, 10, Math.PI / 2); 
-    createWall(5, 8, 2.5, 5, Math.PI / 2); 
-    createWall(0, 8, 5, 10); 
+    createWall(0, 8, -5, 10); // Back
+    createWall(-5, 8, 0, 10, Math.PI / 2); // Left
+    createWall(0, 8, 5, 10); // Front
+    createWall(5, 8, 3.5, 3, Math.PI / 2); // Right (Partial, leaves 2-unit gap for door)
+    
+    // NEW: Bedroom Door
+    createDoor('bedroom', 5, 8, 2, 2, 3.8, Math.PI / 2, -1);
 
     const bed = new THREE.Mesh(new THREE.BoxGeometry(3, 0.8, 6), new THREE.MeshStandardMaterial({color: 0x331111}));
     bed.position.set(-3, 8.4, -1); bed.name = "OBSTACLE_bed"; 
@@ -299,7 +348,8 @@ function buildHouse() {
     // Hallway & Vent
     createWall(10, 8, 5, 20, Math.PI / 2); 
     createWall(15, 8, -5, 10); 
-    createVent(20, 8, 0, Math.PI / 2); // Vent hole you must crouch through!
+    createVent(20, 8, 0, Math.PI / 2); 
+    createPainting(9.7, 10, 0, Math.PI / 2); 
 
     // Stairs Down to Main Floor
     createRamp(15, 4, 15, 4, 14, -Math.PI / 4.5);
@@ -308,13 +358,14 @@ function buildHouse() {
     // 2. MAIN FLOOR (Y = 0)
     // ==========================================
     createFloor(0, 0, 0, 60, 60);
-    createCeiling(0, 4, 0, 60, 60); // Solid ceiling between Main and Upstairs
+    createCeiling(0, 4, 0, 60, 60); 
 
     createWall(0, 0, 20, 20); 
     createWall(-10, 0, 12.5, 15, Math.PI / 2); 
     createWall(10, 0, 12.5, 15, Math.PI / 2); 
+    createPainting(-9.7, 2, 15, Math.PI / 2);
 
-    // Front Door Puzzles
+    // Front Door Puzzles (The Escape Door)
     const doorGroup = new THREE.Group();
     const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(3, 3.8, 0.2), new THREE.MeshStandardMaterial({color: 0x550000}));
     doorMesh.position.set(0, 1.9, 19.9); doorGroup.add(doorMesh); collidableObjects.push(doorMesh);
@@ -327,14 +378,15 @@ function buildHouse() {
     padlock.position.set(-0.5, 1.8, 19.7); padlock.name = "OBSTACLE_mainDoor"; doorGroup.add(padlock);
     scene.add(doorGroup);
 
-    // Weapons Room & Wall-Mounted Box
+    // Weapons Room
     createWall(25, 0, 5, 10, Math.PI / 2); 
-    createWall(20, 0, 10, 10); 
+    createWall(20, 0, 11, 8); // Partial wall, leaves 2-unit gap
     
-    // The Wall-Mounted Weapons Case
+    // NEW: Weapons Room Door
+    createDoor('weapons_room', 19, 0, 10, 2, 3.8, 0, 1);
+
     const weaponsCase = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 0.3), new THREE.MeshStandardMaterial({color: 0x222222}));
-    weaponsCase.position.set(22, 1.5, 9.8); // Mounted high on the wall
-    weaponsCase.name = "OBSTACLE_weaponsCase";
+    weaponsCase.position.set(22, 1.5, 9.8); weaponsCase.name = "OBSTACLE_weaponsCase";
     scene.add(weaponsCase); collidableObjects.push(weaponsCase);
 
     // Garage
@@ -350,53 +402,44 @@ function buildHouse() {
 
     // Stairs Down to Basement
     createRamp(15, -2, -15, 4, 12, Math.PI / 5);
+    
+    // NEW: Basement Door (At the top of the stairs)
+    createDoor('basement_top', 13, 0, -9, 4, 3.8, 0, 1);
 
     // ==========================================
     // 3. BASEMENT (Y = -4)
     // ==========================================
     createFloor(15, -4, -25, 30, 30);
-    createCeiling(15, 0, -25, 30, 30); // Solid ceiling between Basement and Main
+    createCeiling(15, 0, -25, 30, 30); 
     createWall(15, -4, -40, 30); 
     createWall(0, -4, -25, 30, Math.PI/2); 
     createWall(30, -4, -25, 30, Math.PI/2); 
 }
 
-// --- TUNG TUNG SAHUR MONSTER ---
-function createTungTungModel() {
+// --- MULTIPLAYER AVATAR GENERATOR ---
+function createPlayerAvatar(id, username, colors) {
     const group = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ map: wallTexture, color: 0x5c4033 });
-    
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.8, 16), bodyMat);
-    body.position.y = 1.5; group.add(body);
-    
-    const slit = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.2, 0.6), new THREE.MeshBasicMaterial({ color: 0x000000 }));
-    slit.position.set(0.45, 1.5, 0); group.add(slit);
-    
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), bodyMat);
-    head.position.y = 2.7; group.add(head);
-    
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-    const leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), eyeMat); leftEye.position.set(0.2, 2.8, 0.3);
-    const rightEye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), eyeMat); rightEye.position.set(-0.2, 2.8, 0.3);
-    const eyeLight = new THREE.PointLight(0xff0000, 1.5, 8); eyeLight.position.set(0, 2.8, 0.4);
-    group.add(leftEye, rightEye, eyeLight);
-    
-    const armGeom = new THREE.CylinderGeometry(0.05, 0.05, 1.2);
-    const leftArm = new THREE.Mesh(armGeom, bodyMat); leftArm.position.set(0.6, 1.5, 0); leftArm.rotation.z = Math.PI / 8; leftArm.name = "LeftArm";
-    const rightArm = new THREE.Mesh(armGeom, bodyMat); rightArm.position.set(-0.6, 1.5, 0); rightArm.rotation.z = -Math.PI / 8; rightArm.name = "RightArm";
-    group.add(leftArm, rightArm);
-    
-    return group;
+    const bodyMat = new THREE.MeshStandardMaterial({color: colors ? colors.clothes : '#2244aa'});
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.4), bodyMat); body.position.y = 1.0; group.add(body);
+    const pantsMat = new THREE.MeshStandardMaterial({color: colors ? colors.pants : '#111111'});
+    const pants = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.4), pantsMat); pants.position.y = 0.3; group.add(pants);
+    const skinMat = new THREE.MeshStandardMaterial({color: colors ? colors.skin : '#ffccaa'});
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skinMat); head.position.y = 1.65; group.add(head);
+    const hairMat = new THREE.MeshStandardMaterial({color: colors ? colors.hair : '#000000'});
+    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.2, 0.55), hairMat); hair.position.y = 1.95; group.add(hair);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'white'; ctx.font = '32px Courier Prime'; ctx.textAlign = 'center'; ctx.fillText(username, 128, 40);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas) }));
+    sprite.position.y = 2.4; sprite.scale.set(2, 0.5, 1); group.add(sprite);
+
+    group.name = id; group.userData = { isHiding: false };
+    scene.add(group); return group;
 }
 
-function spawnTungTung() {
-    granny = createTungTungModel();
-    if (Math.random() > 0.5) granny.position.set(15, -4, -30); 
-    else granny.position.set(15, 8, 0); 
-    scene.add(granny);
-}
-
-// --- ITEM GENERATION (WITH ARROWS) ---
+// --- ITEM GENERATION ---
 function createItemMesh(type) {
     const group = new THREE.Group();
     if (type === 'hammer') {
@@ -431,8 +474,6 @@ function createItemMesh(type) {
         const base = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 0.05), new THREE.MeshStandardMaterial({color: 0x111111}));
         const metal = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.2), new THREE.MeshStandardMaterial({color: 0xaaaaaa})); metal.position.y = 0.15; group.add(base, metal);
     }
-    
-    // Add physics properties to the group
     group.userData = { velocity: new THREE.Vector3(0,0,0), isFalling: false };
     return group;
 }
@@ -446,183 +487,6 @@ function buildItems(presetData) {
         scene.add(mesh);
         itemMeshes[id] = mesh;
     }
-}
-
-// --- INTERACTION RAYCASTER ---
-const raycaster = new THREE.Raycaster();
-const screenCenter = new THREE.Vector2(0, 0);
-let currentTarget = null;
-let carState = { gas: false, battery: false, key: false };
-
-function checkInteractions() {
-    raycaster.setFromCamera(screenCenter, camera);
-    const intersects = raycaster.intersectObjects(scene.children, true);
-    
-    currentTarget = null;
-    uiInteract.innerText = isHiding ? "HIDING (Press E to exit)" : "";
-
-    if (intersects.length > 0 && !isHiding) {
-        let obj = intersects[0].object;
-        while (obj.parent && obj.parent.type !== 'Scene') {
-            if (obj.name.startsWith("ITEM_") || obj.name.startsWith("OBSTACLE_") || obj.name.startsWith("INTERACT_")) break;
-            obj = obj.parent;
-        }
-
-        if (intersects[0].distance < 3.0) {
-            if (obj.name.startsWith("ITEM_") && obj.visible) {
-                const itemName = obj.name.replace("ITEM_", "");
-                
-                // Special logic for loading arrows
-                if (itemName.startsWith("arrow") && inventory === 'crossbow') {
-                    uiInteract.innerText = "Press E to Load Arrow";
-                } else {
-                    uiInteract.innerText = `Press E to pick up ${itemName.replace('_', ' ')}`;
-                }
-                currentTarget = { type: 'item', id: itemName, obj: obj };
-            } 
-            else if (obj.name.startsWith("INTERACT_wardrobe")) {
-                uiInteract.innerText = "Press E to Customize Character";
-                currentTarget = { type: 'wardrobe', obj: obj };
-            }
-            else if (obj.name.startsWith("OBSTACLE_") && obj.visible) {
-                const obsName = obj.name.replace("OBSTACLE_", "");
-                
-                if (obsName === 'bed') {
-                    uiInteract.innerText = "Press E to hide under bed";
-                    currentTarget = { type: 'obstacle', id: obsName, obj: obj };
-                    return;
-                }
-
-                if (obsName === 'car') {
-                    if (inventory === 'gas_can' && !carState.gas) uiInteract.innerText = "Press E to fuel car";
-                    else if (inventory === 'battery' && !carState.battery) uiInteract.innerText = "Press E to place battery";
-                    else if (inventory === 'car_key' && carState.gas && carState.battery) uiInteract.innerText = "Press E to start car and ESCAPE!";
-                    else uiInteract.innerText = `Car needs: ${!carState.gas?'Gas ':''}${!carState.battery?'Battery ':''}${(!carState.key && carState.gas && carState.battery)?'Key':''}`;
-                    
-                    if (inventory === 'gas_can' || inventory === 'battery' || inventory === 'car_key') {
-                        currentTarget = { type: 'car', id: inventory, obj: obj };
-                    }
-                    return;
-                }
-
-                let req = "";
-                if (obsName === 'barricade') req = 'hammer';
-                if (obsName === 'circuitBox') req = 'pliers';
-                if (obsName === 'mainDoor') req = 'master_key';
-                if (obsName === 'weaponsCase') req = 'weapons_key';
-
-                if (inventory === req) {
-                    uiInteract.innerText = `Press E to use ${req.replace('_', ' ')}`;
-                    currentTarget = { type: 'obstacle', id: obsName, obj: obj };
-                } else {
-                    uiInteract.innerText = `Requires: ${req.replace('_', ' ')}`;
-                }
-            }
-        }
-    }
-}
-
-function performInteraction() {
-    if (isHiding) {
-        isHiding = false; camera.position.set(-3, 9.7, 1); 
-        if (isMultiplayer) socket.emit('setHiding', false);
-        return;
-    }
-
-    if (!currentTarget) return;
-
-    if (currentTarget.type === 'item') {
-        // Loading an arrow into the crossbow
-        if (currentTarget.id.startsWith("arrow") && inventory === 'crossbow') {
-            ammo++;
-            uiAmmo.innerText = `Arrows: ${ammo}`;
-            if (isMultiplayer) socket.emit('itemAction', { itemId: currentTarget.id, action: 'pickup' });
-            else currentTarget.obj.visible = false;
-            return; // Don't drop the crossbow!
-        }
-
-        if (inventory) dropItem();
-        inventory = currentTarget.id;
-        uiInventory.innerText = `Holding: ${inventory.replace('_', ' ')}`;
-        
-        if (inventory === 'crossbow') {
-            uiAmmo.classList.remove('hidden'); uiAmmo.innerText = `Arrows: ${ammo}`;
-            document.getElementById('mobile-shoot').classList.remove('hidden');
-        } else {
-            uiAmmo.classList.add('hidden'); document.getElementById('mobile-shoot').classList.add('hidden');
-        }
-
-        if (isMultiplayer) socket.emit('itemAction', { itemId: inventory, action: 'pickup' });
-        else currentTarget.obj.visible = false;
-    } 
-    else if (currentTarget.type === 'wardrobe') {
-        uiWardrobe.classList.remove('hidden');
-        if (!mobileEnabled) controls.unlock();
-    }
-    else if (currentTarget.type === 'car') {
-        const part = currentTarget.id;
-        if (part === 'gas_can') carState.gas = true;
-        if (part === 'battery') carState.battery = true;
-        if (part === 'car_key') carState.key = true;
-
-        if (isMultiplayer) socket.emit('carPartAdded', part.split('_')[0]); 
-        else { if (carState.gas && carState.battery && carState.key) winGame('Car'); }
-        inventory = null; uiInventory.innerText = `Holding: Nothing`;
-    }
-    else if (currentTarget.type === 'obstacle') {
-        if (currentTarget.id === 'bed') {
-            isHiding = true; camera.position.set(-3, 8.2, -1); 
-            if (isMultiplayer) socket.emit('setHiding', true);
-            return;
-        }
-
-        if (isMultiplayer) socket.emit('puzzleSolved', { obstacleId: currentTarget.id });
-        else {
-            currentTarget.obj.visible = false;
-            if (currentTarget.id === 'weaponsCase') {
-                itemMeshes['crossbow'].visible = true;
-                itemMeshes['arrow_1'].visible = true;
-                itemMeshes['arrow_2'].visible = true;
-                itemMeshes['arrow_3'].visible = true;
-            }
-            if (currentTarget.id === 'mainDoor') winGame('Front Door');
-        }
-        inventory = null; uiInventory.innerText = `Holding: Nothing`;
-    }
-}
-
-// --- GRAVITY ITEM DROPS ---
-function dropItem() {
-    if (!inventory || isHiding) return;
-    
-    // 1. Calculate toss trajectory
-    const dropPos = new THREE.Vector3();
-    camera.getWorldDirection(dropPos);
-    
-    // Toss it slightly forward and up
-    const tossVelocity = new THREE.Vector3(dropPos.x * 3, 2, dropPos.z * 3);
-    
-    dropPos.multiplyScalar(1.0).add(camera.position);
-
-    const mesh = itemMeshes[inventory];
-    mesh.position.copy(dropPos);
-    mesh.userData.velocity = tossVelocity;
-    mesh.userData.isFalling = true;
-    
-    if (!physicsItems.includes(mesh)) physicsItems.push(mesh);
-
-    window.noiseTarget = dropPos.clone();
-    window.noiseTimer = 8.0; 
-    
-    if (isMultiplayer) {
-        socket.emit('itemAction', { itemId: inventory, action: 'drop', pos: dropPos });
-        socket.emit('makeNoise', dropPos);
-    } else {
-        mesh.visible = true;
-    }
-    
-    inventory = null; uiInventory.innerText = `Holding: Nothing`;
-    uiAmmo.classList.add('hidden'); document.getElementById('mobile-shoot').classList.add('hidden');
 }
 // --- CONTINUING FROM PART 2 ---
 
@@ -699,44 +563,199 @@ function updateDomain(delta) {
     }
 }
 
-// --- SHOOTING MECHANIC (WITH PROJECTILE PHYSICS) ---
+// --- INTERACTION RAYCASTER (NOW WITH DOORS!) ---
+const raycaster = new THREE.Raycaster();
+const screenCenter = new THREE.Vector2(0, 0);
+let currentTarget = null;
+let carState = { gas: false, battery: false, key: false };
+
+function checkInteractions() {
+    raycaster.setFromCamera(screenCenter, camera);
+    const intersects = raycaster.intersectObjects(scene.children, true);
+    
+    currentTarget = null;
+    uiInteract.innerText = isHiding ? "HIDING (Press E to exit)" : "";
+
+    if (intersects.length > 0 && !isHiding) {
+        let obj = intersects[0].object;
+        while (obj.parent && obj.parent.type !== 'Scene') {
+            if (obj.name.startsWith("ITEM_") || obj.name.startsWith("OBSTACLE_") || obj.name.startsWith("INTERACT_")) break;
+            obj = obj.parent;
+        }
+
+        if (intersects[0].distance < 3.0) {
+            if (obj.name.startsWith("ITEM_") && obj.visible) {
+                const itemName = obj.name.replace("ITEM_", "");
+                if (itemName.startsWith("arrow") && inventory === 'crossbow') uiInteract.innerText = "Press E to Load Arrow";
+                else uiInteract.innerText = `Press E to pick up ${itemName.replace('_', ' ')}`;
+                currentTarget = { type: 'item', id: itemName, obj: obj };
+            } 
+            else if (obj.name.startsWith("INTERACT_wardrobe")) {
+                uiInteract.innerText = "Press E to Customize Character";
+                currentTarget = { type: 'wardrobe', obj: obj };
+            }
+            else if (obj.name.startsWith("INTERACT_door_")) {
+                const doorId = obj.name.replace("INTERACT_door_", "");
+                const action = doors[doorId].isOpen ? "Close" : "Open";
+                uiInteract.innerText = `Press E to ${action} Door`;
+                currentTarget = { type: 'door', id: doorId, obj: obj };
+            }
+            else if (obj.name.startsWith("OBSTACLE_") && obj.visible) {
+                const obsName = obj.name.replace("OBSTACLE_", "");
+                
+                if (obsName === 'bed') {
+                    uiInteract.innerText = "Press E to hide under bed";
+                    currentTarget = { type: 'obstacle', id: obsName, obj: obj };
+                    return;
+                }
+
+                if (obsName === 'car') {
+                    if (inventory === 'gas_can' && !carState.gas) uiInteract.innerText = "Press E to fuel car";
+                    else if (inventory === 'battery' && !carState.battery) uiInteract.innerText = "Press E to place battery";
+                    else if (inventory === 'car_key' && carState.gas && carState.battery) uiInteract.innerText = "Press E to start car and ESCAPE!";
+                    else uiInteract.innerText = `Car needs: ${!carState.gas?'Gas ':''}${!carState.battery?'Battery ':''}${(!carState.key && carState.gas && carState.battery)?'Key':''}`;
+                    
+                    if (inventory === 'gas_can' || inventory === 'battery' || inventory === 'car_key') currentTarget = { type: 'car', id: inventory, obj: obj };
+                    return;
+                }
+
+                let req = "";
+                if (obsName === 'barricade') req = 'hammer';
+                if (obsName === 'circuitBox') req = 'pliers';
+                if (obsName === 'mainDoor') req = 'master_key';
+                if (obsName === 'weaponsCase') req = 'weapons_key';
+
+                if (inventory === req) {
+                    uiInteract.innerText = `Press E to use ${req.replace('_', ' ')}`;
+                    currentTarget = { type: 'obstacle', id: obsName, obj: obj };
+                } else {
+                    uiInteract.innerText = `Requires: ${req.replace('_', ' ')}`;
+                }
+            }
+        }
+    }
+}
+
+function performInteraction() {
+    if (isHiding) {
+        isHiding = false; camera.position.set(-3, 9.7, 1); 
+        if (isMultiplayer) socket.emit('setHiding', false);
+        return;
+    }
+
+    if (!currentTarget) return;
+
+    if (currentTarget.type === 'item') {
+        if (currentTarget.id.startsWith("arrow") && inventory === 'crossbow') {
+            ammo++; uiAmmo.innerText = `Arrows: ${ammo}`;
+            if (isMultiplayer) socket.emit('itemAction', { itemId: currentTarget.id, action: 'pickup' });
+            else currentTarget.obj.visible = false;
+            return; 
+        }
+
+        if (inventory) dropItem();
+        inventory = currentTarget.id;
+        uiInventory.innerText = `Holding: ${inventory.replace('_', ' ')}`;
+        
+        if (inventory === 'crossbow') {
+            uiAmmo.classList.remove('hidden'); uiAmmo.innerText = `Arrows: ${ammo}`;
+            document.getElementById('mobile-shoot').classList.remove('hidden');
+        } else {
+            uiAmmo.classList.add('hidden'); document.getElementById('mobile-shoot').classList.add('hidden');
+        }
+
+        if (isMultiplayer) socket.emit('itemAction', { itemId: inventory, action: 'pickup' });
+        else currentTarget.obj.visible = false;
+    } 
+    else if (currentTarget.type === 'wardrobe') {
+        uiWardrobe.classList.remove('hidden');
+        if (!mobileEnabled) controls.unlock();
+    }
+    else if (currentTarget.type === 'door') {
+        // Toggle Door State!
+        const doorId = currentTarget.id;
+        doors[doorId].isOpen = !doors[doorId].isOpen;
+        if (isMultiplayer) socket.emit('toggleDoor', { id: doorId, isOpen: doors[doorId].isOpen });
+    }
+    else if (currentTarget.type === 'car') {
+        const part = currentTarget.id;
+        if (part === 'gas_can') carState.gas = true;
+        if (part === 'battery') carState.battery = true;
+        if (part === 'car_key') carState.key = true;
+
+        if (isMultiplayer) socket.emit('carPartAdded', part.split('_')[0]); 
+        else { if (carState.gas && carState.battery && carState.key) winGame('Car'); }
+        inventory = null; uiInventory.innerText = `Holding: Nothing`;
+    }
+    else if (currentTarget.type === 'obstacle') {
+        if (currentTarget.id === 'bed') {
+            isHiding = true; camera.position.set(-3, 8.2, -1); 
+            if (isMultiplayer) socket.emit('setHiding', true);
+            return;
+        }
+
+        if (isMultiplayer) socket.emit('puzzleSolved', { obstacleId: currentTarget.id });
+        else {
+            currentTarget.obj.visible = false;
+            if (currentTarget.id === 'weaponsCase') {
+                itemMeshes['crossbow'].visible = true; itemMeshes['arrow_1'].visible = true; itemMeshes['arrow_2'].visible = true; itemMeshes['arrow_3'].visible = true;
+            }
+            if (currentTarget.id === 'mainDoor') winGame('Front Door');
+        }
+        inventory = null; uiInventory.innerText = `Holding: Nothing`;
+    }
+}
+
+function dropItem() {
+    if (!inventory || isHiding) return;
+    const dropPos = new THREE.Vector3();
+    camera.getWorldDirection(dropPos);
+    const tossVelocity = new THREE.Vector3(dropPos.x * 3, 2, dropPos.z * 3);
+    dropPos.multiplyScalar(1.0).add(camera.position);
+
+    const mesh = itemMeshes[inventory];
+    mesh.position.copy(dropPos);
+    mesh.userData.velocity = tossVelocity;
+    mesh.userData.isFalling = true;
+    if (!physicsItems.includes(mesh)) physicsItems.push(mesh);
+
+    window.noiseTarget = dropPos.clone();
+    window.noiseTimer = 8.0; 
+    
+    if (isMultiplayer) {
+        socket.emit('itemAction', { itemId: inventory, action: 'drop', pos: dropPos });
+        socket.emit('makeNoise', dropPos);
+    } else { mesh.visible = true; }
+    
+    inventory = null; uiInventory.innerText = `Holding: Nothing`;
+    uiAmmo.classList.add('hidden'); document.getElementById('mobile-shoot').classList.add('hidden');
+}
+
+// --- SHOOTING MECHANIC ---
 function shootCrossbow() {
     if (inventory !== 'crossbow' || ammo <= 0 || tungTungKnockedOut || isKillingPlayer) return;
-
-    ammo--;
-    uiAmmo.innerText = `Arrows: ${ammo}`;
+    ammo--; uiAmmo.innerText = `Arrows: ${ammo}`;
 
     if (audioCtx.state === 'suspended') audioCtx.resume();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'square'; osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+    const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+    osc.type = 'square'; osc.frequency.setValueAtTime(800, audioCtx.currentTime); osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
     gain.gain.setValueAtTime(0.5, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
     osc.connect(gain); gain.connect(audioCtx.destination);
     osc.start(); osc.stop(audioCtx.currentTime + 0.1);
 
-    // Spawn Arrow Projectile
     const arrow = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.8), new THREE.MeshStandardMaterial({color: 0x8b4513}));
     arrow.rotation.x = Math.PI / 2;
-    
-    // Align arrow with camera direction
-    const dir = new THREE.Vector3();
-    camera.getWorldDirection(dir);
-    
-    arrow.position.copy(camera.position).add(dir.clone().multiplyScalar(0.5)); // Spawn slightly in front
+    const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+    arrow.position.copy(camera.position).add(dir.clone().multiplyScalar(0.5)); 
     arrow.lookAt(camera.position.clone().add(dir));
-    
-    arrow.userData = { velocity: dir.multiplyScalar(25) }; // Arrow flies at 25 units/sec
-    scene.add(arrow);
-    activeProjectiles.push(arrow);
+    arrow.userData = { velocity: dir.multiplyScalar(25) }; 
+    scene.add(arrow); activeProjectiles.push(arrow);
 }
 
 function triggerTungTungKnockout() {
     if (!granny || tungTungKnockedOut || isKillingPlayer) return;
-    tungTungKnockedOut = true;
-    tungTungKnockoutTimer = 90.0; // 1 minute 30 seconds!
-    granny.rotation.x = -Math.PI / 2; // Ragdoll faceplant
-    
+    tungTungKnockedOut = true; tungTungKnockoutTimer = 90.0; 
+    granny.rotation.x = -Math.PI / 2; 
     if (granny.position.y > 4) granny.position.y = 8.5; 
     else if (granny.position.y > -2) granny.position.y = 0.5; 
     else granny.position.y = -3.5; 
@@ -744,9 +763,9 @@ function triggerTungTungKnockout() {
 
 // --- TUNG TUNG WAYPOINT AI ---
 const tungTungWaypoints = [
-    new THREE.Vector3(0, 8, 0), new THREE.Vector3(10, 8, 5), new THREE.Vector3(20, 8, 0), // Upstairs
-    new THREE.Vector3(0, 0, 15), new THREE.Vector3(-10, 0, -5), new THREE.Vector3(20, 0, 5), // Main Floor
-    new THREE.Vector3(15, -4, -30), new THREE.Vector3(5, -4, -25) // Basement
+    new THREE.Vector3(0, 8, 0), new THREE.Vector3(10, 8, 5), new THREE.Vector3(20, 8, 0), 
+    new THREE.Vector3(0, 0, 15), new THREE.Vector3(-10, 0, -5), new THREE.Vector3(20, 0, 5), 
+    new THREE.Vector3(15, -4, -30), new THREE.Vector3(5, -4, -25) 
 ];
 let currentWaypoint = tungTungWaypoints[0];
 
@@ -755,8 +774,7 @@ function updateTungTungAI(delta) {
 
     if (isKillingPlayer) {
         camera.lookAt(granny.position.x, granny.position.y + 2.7, granny.position.z);
-        const leftArm = granny.getObjectByName("LeftArm");
-        const rightArm = granny.getObjectByName("RightArm");
+        const leftArm = granny.getObjectByName("LeftArm"); const rightArm = granny.getObjectByName("RightArm");
         if (leftArm && leftArm.rotation.x > -Math.PI/2) leftArm.rotation.x -= delta * 5;
         if (rightArm && rightArm.rotation.x > -Math.PI/2) rightArm.rotation.x -= delta * 5;
         return;
@@ -765,20 +783,14 @@ function updateTungTungAI(delta) {
     if (tungTungKnockedOut) {
         tungTungKnockoutTimer -= delta;
         if (tungTungKnockoutTimer <= 0) {
-            // WAKE UP and respawn in basement
-            tungTungKnockedOut = false;
-            granny.rotation.x = 0; 
-            granny.position.set(15, -4, -30);
-            tungTungState = 'patrol';
+            tungTungKnockedOut = false; granny.rotation.x = 0; 
+            granny.position.set(15, -4, -30); tungTungState = 'patrol';
         }
         return;
     }
 
-    let targetPos = null;
-    let minDistance = Infinity;
-    let playerSpotted = false;
+    let targetPos = null; let minDistance = Infinity; let playerSpotted = false;
 
-    // 1. Check for Players (Agro System)
     if (isMultiplayer) {
         for (const [id, pMesh] of Object.entries(remotePlayers)) {
             if (pMesh.userData.isHiding) continue; 
@@ -791,85 +803,60 @@ function updateTungTungAI(delta) {
         if (dist < 15) { minDistance = dist; targetPos = camera.position; playerSpotted = true; }
     }
 
-    // State Machine
-    if (playerSpotted) {
-        tungTungState = 'chase';
-    } else if (window.noiseTarget && window.noiseTimer > 0) {
-        tungTungState = 'investigate';
-        targetPos = window.noiseTarget;
-        window.noiseTimer -= delta;
+    if (playerSpotted) tungTungState = 'chase';
+    else if (window.noiseTarget && window.noiseTimer > 0) {
+        tungTungState = 'investigate'; targetPos = window.noiseTarget; window.noiseTimer -= delta;
         if (granny.position.distanceTo(window.noiseTarget) < 1.5) window.noiseTarget = null;
     } else {
-        if (tungTungState === 'chase' || tungTungState === 'investigate') {
-            tungTungState = 'lookAround';
-            tungTungWaitTimer = 3.0; // Look around for 3 seconds after losing target
-        }
+        if (tungTungState === 'chase' || tungTungState === 'investigate') { tungTungState = 'lookAround'; tungTungWaitTimer = 3.0; }
     }
 
     if (tungTungState === 'lookAround') {
-        tungTungWaitTimer -= delta;
-        granny.rotation.y += delta; // Spin slowly to look around
-        if (tungTungWaitTimer <= 0) {
-            tungTungState = 'patrol';
-            currentWaypoint = tungTungWaypoints[Math.floor(Math.random() * tungTungWaypoints.length)];
-        }
-        return; // Don't move while looking around
+        tungTungWaitTimer -= delta; granny.rotation.y += delta; 
+        if (tungTungWaitTimer <= 0) { tungTungState = 'patrol'; currentWaypoint = tungTungWaypoints[Math.floor(Math.random() * tungTungWaypoints.length)]; }
+        return; 
     }
 
     if (tungTungState === 'patrol') {
         targetPos = currentWaypoint;
-        if (granny.position.distanceTo(targetPos) < 2.0) {
-            tungTungState = 'lookAround';
-            tungTungWaitTimer = 2.0; // Pause at waypoint
-        }
+        if (granny.position.distanceTo(targetPos) < 2.0) { tungTungState = 'lookAround'; tungTungWaitTimer = 2.0; }
     }
 
-    // Move Tung Tung
     if (targetPos) {
-        // Floor Raycaster for Tung Tung (Smooth stairs)
         const rayOrigin = new THREE.Vector3(granny.position.x, granny.position.y + 2, granny.position.z);
         floorRaycaster.set(rayOrigin, downVector);
         const floorIntersects = floorRaycaster.intersectObjects(floorMeshes);
-        
-        if (floorIntersects.length > 0) {
-            const targetY = floorIntersects[0].point.y;
-            granny.position.y += (targetY - granny.position.y) * 10 * delta; // Smooth Y adjustment
-        }
+        if (floorIntersects.length > 0) granny.position.y += (floorIntersects[0].point.y - granny.position.y) * 10 * delta; 
 
         const lookTarget = new THREE.Vector3(targetPos.x, granny.position.y, targetPos.z);
         granny.lookAt(lookTarget);
         
-        const speed = (tungTungState === 'chase') ? (isMultiplayer ? 4.0 : 3.5) : 2.0; // Faster when chasing
+        const speed = (tungTungState === 'chase') ? (isMultiplayer ? 4.0 : 3.5) : 2.0; 
         granny.translateZ(speed * delta);
 
-        if (tungTungState === 'chase' && targetPos === camera.position && minDistance < 1.5 && !isHiding) {
-            startKillAnimation();
-        }
+        if (tungTungState === 'chase' && targetPos === camera.position && minDistance < 1.5 && !isHiding) startKillAnimation();
     }
 }
 
 function startKillAnimation() {
-    isKillingPlayer = true;
-    moveForward = false; moveBackward = false; moveLeft = false; moveRight = false;
+    isKillingPlayer = true; moveForward = false; moveBackward = false; moveLeft = false; moveRight = false;
     if (!mobileEnabled) controls.unlock();
     
     if (audioCtx.state === 'suspended') audioCtx.resume();
-    const osc = audioCtx.createOscillator();
-    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 1);
-    osc.connect(audioCtx.destination);
+    const osc = audioCtx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 1); osc.connect(audioCtx.destination);
     osc.start(); osc.stop(audioCtx.currentTime + 1.5);
-
     setTimeout(triggerDeath, 1500); 
 }
+// --- CONTINUING FROM PART 3 ---
 
-// --- INPUT LISTENERS (ADDED CROUCH & SHOOT) ---
+// --- INPUT LISTENERS (CROUCH, SHOOT, DOMAIN) ---
 window.addEventListener('keydown', (e) => {
     if (isDead || isKillingPlayer) return;
     if (e.code === 'KeyE') performInteraction();
     if (e.code === 'KeyQ') dropItem();
-    if (e.code === 'KeyC') isCrouching = !isCrouching; // CROUCH TOGGLE
-    if (e.code === 'KeyF') shootCrossbow(); // SHOOT
+    if (e.code === 'KeyC') isCrouching = !isCrouching; 
+    if (e.code === 'KeyF') shootCrossbow(); 
     if (e.code === 'KeyJ' && hasDomain && domainCooldown <= 0 && !domainActive) {
         triggerDomainExpansion(camera.position);
         if (isMultiplayer) socket.emit('activateDomain', camera.position);
@@ -941,7 +928,6 @@ function setupMobileControls() {
     }, { passive: false });
     lookZone.addEventListener('touchend', (e) => { for (let i=0; i<e.changedTouches.length; i++) { if (e.changedTouches[i].identifier === lookTouchId) lookTouchId = null; } });
 }
-// --- CONTINUING FROM PART 3 ---
 
 // --- DEATH & RESPAWN ---
 function triggerDeath() {
@@ -967,11 +953,11 @@ function respawnPlayer() {
     uiDeath.classList.add('hidden');
     uiGame.classList.remove('hidden');
     uiLives.innerText = `Lives: ${lives}`;
-    camera.position.set(0, 9.7, 0); // Respawn UPSTAIRS
+    camera.position.set(0, 9.7, 2); // Respawn UPSTAIRS (offset to avoid wall)
     camera.rotation.set(0, 0, 0);
     
     if (granny && !isMultiplayer) {
-        granny.position.set(15, -4, -30); // Reset Tung Tung to basement
+        granny.position.set(15, -4, -30); 
         tungTungKnockedOut = false;
         tungTungState = 'patrol';
         granny.rotation.x = 0;
@@ -988,7 +974,7 @@ function winGame(type) {
     location.reload();
 }
 
-// --- MAIN ANIMATION LOOP (PHYSICS & RAYCASTING) ---
+// --- MAIN ANIMATION LOOP (PHYSICS, DOORS, & RAYCASTING) ---
 function animate() {
     requestAnimationFrame(animate);
     const time = performance.now();
@@ -997,13 +983,22 @@ function animate() {
 
     updateDomain(delta);
 
+    // 1. ANIMATE DOORS (Smooth Swinging)
+    for (const id in doors) {
+        const door = doors[id];
+        const targetRot = door.isOpen ? door.openRot : door.closedRot;
+        // Lerp rotation for smooth swinging
+        door.currentRot += (targetRot - door.currentRot) * 5 * delta;
+        door.pivot.rotation.y = door.currentRot;
+    }
+
     if (!isDead && !isKillingPlayer && (controls.isLocked || mobileEnabled)) {
         checkInteractions();
 
         if (!isHiding && !domainActive) {
             const oldPosition = camera.position.clone();
 
-            // 1. Player Movement Physics
+            // 2. Player Movement Physics
             velocity.x -= velocity.x * 10.0 * delta;
             velocity.z -= velocity.z * 10.0 * delta;
 
@@ -1013,7 +1008,6 @@ function animate() {
 
             if (mobileEnabled) { direction.x += mobileMoveData.x; direction.z -= mobileMoveData.y; }
 
-            // Slower if crouching
             const currentSpeed = isCrouching ? 15.0 : (isSprinting ? 50.0 : 25.0); 
             if (moveForward || moveBackward || mobileMoveData.y !== 0) velocity.z -= direction.z * currentSpeed * delta;
             if (moveLeft || moveRight || mobileMoveData.x !== 0) velocity.x -= direction.x * currentSpeed * delta;
@@ -1021,7 +1015,7 @@ function animate() {
             controls.moveRight(-velocity.x * delta);
             controls.moveForward(-velocity.z * delta);
 
-            // 2. Wall Collisions
+            // 3. Wall Collisions
             const playerHeight = isCrouching ? 0.8 : 1.5;
             const playerBox = new THREE.Box3().setFromCenterAndSize(
                 new THREE.Vector3(camera.position.x, camera.position.y - (playerHeight/2), camera.position.z), 
@@ -1038,47 +1032,43 @@ function animate() {
                 velocity.x = 0; velocity.z = 0;
             }
 
-            // 3. Floor Raycaster (Smooth Stairs & Ramps)
+            // 4. Floor Raycaster (Smooth Stairs & Ramps)
             const rayOrigin = new THREE.Vector3(camera.position.x, camera.position.y + 2, camera.position.z);
             floorRaycaster.set(rayOrigin, downVector);
             const floorIntersects = floorRaycaster.intersectObjects(floorMeshes);
             
             if (floorIntersects.length > 0) {
-                // Target height depends on if we are crouching (0.8) or standing (1.7)
                 const targetHeight = floorIntersects[0].point.y + (isCrouching ? 0.8 : 1.7);
-                camera.position.y += (targetHeight - camera.position.y) * 15 * delta; // Smooth interpolation
+                camera.position.y += (targetHeight - camera.position.y) * 15 * delta; 
             }
         }
 
-        // 4. Gravity Item Drops Physics
+        // 5. Gravity Item Drops Physics
         for (let i = physicsItems.length - 1; i >= 0; i--) {
             const item = physicsItems[i];
             if (item.userData.isFalling) {
                 item.userData.velocity.y -= 9.8 * delta; // Gravity
                 item.position.add(item.userData.velocity.clone().multiplyScalar(delta));
                 
-                // Check if it hit the floor
                 floorRaycaster.set(new THREE.Vector3(item.position.x, item.position.y + 1, item.position.z), downVector);
                 const floorHits = floorRaycaster.intersectObjects(floorMeshes);
                 
                 if (floorHits.length > 0 && item.position.y <= floorHits[0].point.y + 0.2) {
                     item.position.y = floorHits[0].point.y + 0.2;
                     item.userData.isFalling = false;
-                    physicsItems.splice(i, 1); // Remove from physics array
+                    physicsItems.splice(i, 1); 
                 }
             }
         }
 
-        // 5. Arrow Projectile Physics
+        // 6. Arrow Projectile Physics
         for (let i = activeProjectiles.length - 1; i >= 0; i--) {
             const arrow = activeProjectiles[i];
             arrow.position.add(arrow.userData.velocity.clone().multiplyScalar(delta));
             
-            // Check Arrow Collisions
             const arrowBox = new THREE.Box3().setFromObject(arrow);
             let hitSomething = false;
 
-            // Hit Tung Tung?
             if (granny && !tungTungKnockedOut) {
                 const grannyBox = new THREE.Box3().setFromObject(granny);
                 if (arrowBox.intersectsBox(grannyBox)) {
@@ -1088,7 +1078,6 @@ function animate() {
                 }
             }
 
-            // Hit Wall?
             if (!hitSomething) {
                 for (let w = 0; w < collidableObjects.length; w++) {
                     const wallBox = new THREE.Box3().setFromObject(collidableObjects[w]);
@@ -1129,6 +1118,7 @@ function connectToServer(username) {
         buildItems(data.gameState);
         spawnTungTung();
 
+        // Sync Puzzles & Weapons Case
         for (const [obsId, obsData] of Object.entries(data.gameState.puzzles)) {
             if (obsData.solved) {
                 const mesh = scene.getObjectByName(`OBSTACLE_${obsId}`);
@@ -1142,12 +1132,17 @@ function connectToServer(username) {
             }
         }
 
+        // Sync Doors
+        for (const [doorId, isOpen] of Object.entries(data.gameState.doors)) {
+            if (doors[doorId]) doors[doorId].isOpen = isOpen;
+        }
+
         for (const [id, pData] of Object.entries(data.players)) {
             if (id !== myId && !pData.isDead) {
                 remotePlayers[id] = createPlayerAvatar(id, pData.username, pData.customization);
                 remotePlayers[id].position.copy(pData.pos);
                 if (pData.isHiding) remotePlayers[id].visible = false;
-                if (pData.isCrouching) remotePlayers[id].scale.y = 0.5; // Squish avatar if crouching
+                if (pData.isCrouching) remotePlayers[id].scale.y = 0.5; 
             }
         }
         if (!mobileEnabled) controls.lock();
@@ -1166,7 +1161,6 @@ function connectToServer(username) {
         if (remotePlayers[data.id]) {
             remotePlayers[data.id].position.copy(data.pos);
             remotePlayers[data.id].rotation.y = data.rot;
-            // Sync crouching visual
             remotePlayers[data.id].scale.y = data.isCrouching ? 0.5 : 1.0;
         }
     });
@@ -1176,6 +1170,11 @@ function connectToServer(username) {
             remotePlayers[data.id].userData.isHiding = data.isHiding;
             remotePlayers[data.id].visible = !data.isHiding;
         }
+    });
+
+    // NEW: Sync Door Toggles
+    socket.on('doorToggled', (data) => {
+        if (doors[data.id]) doors[data.id].isOpen = data.isOpen;
     });
 
     socket.on('noiseMade', (pos) => { window.noiseTarget = new THREE.Vector3(pos.x, pos.y, pos.z); window.noiseTimer = 8.0; });
@@ -1191,9 +1190,8 @@ function connectToServer(username) {
             mesh.visible = data.itemState.visible;
             if (data.itemState.pos) mesh.position.copy(data.itemState.pos);
             
-            // If dropped by another player, apply gravity physics locally
             if (data.itemState.visible && !data.itemState.holder) {
-                mesh.userData.velocity = new THREE.Vector3(0, 2, 0); // Small pop up
+                mesh.userData.velocity = new THREE.Vector3(0, 2, 0); 
                 mesh.userData.isFalling = true;
                 if (!physicsItems.includes(mesh)) physicsItems.push(mesh);
             }
