@@ -145,8 +145,15 @@ setInterval(() => {
 // --- ENGINE INITIALIZATION (BLANK SCREEN FIX) ---
 function initEngine() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0a0a);
-    scene.fog = new THREE.FogExp2(0x0a0a0a, 0.030); // Slightly thinner fog
+    scene.background = new THREE.Color(0x111111); // Dark grey, NOT black
+    scene.fog = new THREE.FogExp2(0x111111, 0.02); // Much thinner fog
+
+    // Brighten the main ambient light
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // White light at 60% brightness
+    scene.add(ambientLight);
+
+    // Make flashlight stronger
+    const flashlight = new THREE.SpotLight(0xffffff, 2.5, 50, Math.PI / 4, 0.5, 1);
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     // BLANK SCREEN FIX: Spawn at Z=2 instead of Z=0 to avoid clipping perfectly into the wall edge!
@@ -162,12 +169,8 @@ function initEngine() {
     controls = new PointerLockControls(camera, document.body);
 
     // BLANK SCREEN FIX: Brighter flashlight and ambient light
-    const flashlight = new THREE.SpotLight(0xffffff, 2.0, 40, Math.PI / 4, 0.5, 1); 
     flashlight.position.set(0, 0, 0); flashlight.target.position.set(0, 0, -1);
     camera.add(flashlight); camera.add(flashlight.target); scene.add(camera);
-
-    const ambientLight = new THREE.AmbientLight(0x666666); 
-    scene.add(ambientLight);
 
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
@@ -189,11 +192,15 @@ document.getElementById('btn-save-wardrobe').addEventListener('click', () => {
 
 document.getElementById('btn-singleplayer').addEventListener('click', () => startGame(false));
 document.getElementById('btn-multiplayer').addEventListener('click', () => startGame(true));
-
+//FIXES ARE HERE FINDDDD!!
 window.startGame = function(multi) {
     isMultiplayer = multi;
     const username = document.getElementById('username-input').value || 'Guest-' + Math.floor(Math.random() * 9000);
-    uiMainMenu.classList.add('hidden'); uiGame.classList.remove('hidden');
+    
+    // Hide menu immediately
+    uiMainMenu.classList.add('hidden');
+    uiGame.classList.remove('hidden');
+    
     if (audioCtx.state === 'suspended') audioCtx.resume();
 
     initEngine();
@@ -203,7 +210,8 @@ window.startGame = function(multi) {
         connectToServer(username); 
     } else {
         buildHouse();
-        const mockPreset = { items: {
+        // Use a default state for single player so it loads even without a server
+        buildItems({ items: {
             'hammer': { pos: {x: 15, y: -3.5, z: -25}, visible: true },
             'pliers': { pos: {x: 12, y: 0.5, z: 5}, visible: true },
             'master_key': { pos: {x: 0, y: 8.5, z: 0}, visible: true },
@@ -215,14 +223,12 @@ window.startGame = function(multi) {
             'gas_can': { pos: {x: 25, y: -3.5, z: -25}, visible: true },
             'car_key': { pos: {x: 5, y: 8.5, z: 5}, visible: true },
             'battery': { pos: {x: 10, y: 0.5, z: -5}, visible: true }
-        }};
-        buildItems(mockPreset); 
+        }}); 
         spawnTungTung();
-        if (Math.random() < 0.0067) { hasDomain = true; uiDomain.classList.remove('hidden'); }
         if (!mobileEnabled) controls.lock();
         animate(); 
     }
-}
+};
 
 // --- NEW: INTERACTIVE DOOR BUILDER ---
 function createDoor(id, x, y, z, width, height, rotationY, swingDirection = 1) {
@@ -1032,7 +1038,7 @@ function animate() {
                 velocity.x = 0; velocity.z = 0;
             }
 
-            // 4. Floor Raycaster (Smooth Stairs & Ramps)
+            // 4. Floor Raycaster (Safe Version)
             const rayOrigin = new THREE.Vector3(camera.position.x, camera.position.y + 2, camera.position.z);
             floorRaycaster.set(rayOrigin, downVector);
             const floorIntersects = floorRaycaster.intersectObjects(floorMeshes);
@@ -1040,6 +1046,9 @@ function animate() {
             if (floorIntersects.length > 0) {
                 const targetHeight = floorIntersects[0].point.y + (isCrouching ? 0.8 : 1.7);
                 camera.position.y += (targetHeight - camera.position.y) * 15 * delta; 
+            } else {
+                // If we aren't hitting a floor, STAY AT SPAWN HEIGHT (prevents black screen)
+                if (camera.position.y < -10) camera.position.y = 9.7; 
             }
         }
 
@@ -1113,7 +1122,8 @@ function connectToServer(username) {
         myId = data.id;
         hasDomain = data.players[myId].hasDomain;
         if (hasDomain) uiDomain.classList.remove('hidden');
-
+        
+        animate();
         buildHouse();
         buildItems(data.gameState);
         spawnTungTung();
@@ -1146,7 +1156,7 @@ function connectToServer(username) {
             }
         }
         if (!mobileEnabled) controls.lock();
-        animate();
+        animate(); // This must be here to kickstart the engine
     });
 
     socket.on('playerJoined', (pData) => remotePlayers[pData.id] = createPlayerAvatar(pData.id, pData.username, pData.customization));
