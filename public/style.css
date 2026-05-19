@@ -9,13 +9,13 @@ body, html {
 
 .hidden { display: none !important; }
 
-/* UI Layers */
+/* UI Layers - pointer-events: auto is CRITICAL for buttons to work */
 .ui-layer {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(10, 5, 5, 0.95);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     z-index: 100; color: #ff0000; text-align: center;
-    pointer-events: auto;
+    pointer-events: auto; 
 }
 
 .title { font-family: 'Creepster', cursive; font-size: 4rem; margin-bottom: 0; text-shadow: 0 0 15px #ff0000; }
@@ -36,7 +36,7 @@ button {
     padding: 15px; background: #330000; color: #fff;
     border: 2px solid #ff0000; cursor: pointer;
     font-family: 'Courier Prime', monospace; font-weight: bold; font-size: 1.1rem;
-    transition: 0.2s;
+    transition: 0.2s; pointer-events: auto;
 }
 button:hover { background: #550000; box-shadow: 0 0 15px #ff0000; }
 
