@@ -1,7 +1,7 @@
 {
-  "name": "tung-tung-sahorror-v2",
-  "version": "2.0.0",
-  "description": "Tung Tung Tung Sahorror: Ultimate Granny 1:1 Clone",
+  "name": "tung-tung-sahorror-ultimate",
+  "version": "3.0.0",
+  "description": "Tung Tung Tung Sahorror: 1:1 Granny Clone with Physics",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
