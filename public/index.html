@@ -3,78 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tung Tung Tung Sahorror: Escape House 3D</title>
+    <title>Tung Tung Tung Sahorror</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- MAIN MENU -->
     <div id="main-menu" class="ui-layer">
-        <h1 class="title">TUNG TUNG TUNG SAHORROR</h1>
-        <p class="subtitle">Escape House 3D Granny</p>
+        <h1 class="title">TUNG TUNG SAHORROR</h1>
+        <p class="subtitle">Escape House 3D</p>
         <div class="menu-box">
-            <input type="text" id="username-input" placeholder="Enter Username (Optional)" maxlength="15">
-            <button id="btn-singleplayer">Play Single Player</button>
-            <button id="btn-multiplayer">Join Public Server (50 Max)</button>
-            <button id="btn-settings">Settings</button>
+            <input type="text" id="username-input" placeholder="Enter Username..." maxlength="15">
+            <button id="btn-singleplayer">PLAY SINGLE PLAYER</button>
+            <button id="btn-multiplayer">JOIN PUBLIC SERVER (50)</button>
+            <button id="btn-settings">SETTINGS</button>
         </div>
     </div>
 
+    <!-- SETTINGS MENU -->
     <div id="settings-menu" class="ui-layer hidden">
         <h2>SETTINGS</h2>
-        <div class="settings-box">
-            <label>Look Sensitivity: <span id="sens-val">0.0005</span></label>
+        <div class="menu-box">
+            <label style="color:white;">Look Sensitivity: <span id="sens-val">0.0005</span></label>
             <input type="range" id="sensitivity" min="1" max="50" value="5">
-            <br><br>
-            <label class="checkbox-container">Enable Mobile Controls
-                <input type="checkbox" id="mobile-toggle">
-            </label>
-            <br><br>
-            <button id="btn-back-settings">Back to Menu</button>
-        </div>
-    </div>
-
-    <div id="wardrobe-menu" class="ui-layer hidden">
-        <h2>CUSTOMIZE CHARACTER</h2>
-        <div class="settings-box">
-            <label>Hair: <input type="color" id="color-hair" value="#000000"></label>
-            <label>Skin: <input type="color" id="color-skin" value="#ffccaa"></label>
-            <label>Shirt: <input type="color" id="color-clothes" value="#2244aa"></label>
-            <label>Pants: <input type="color" id="color-pants" value="#111111"></label>
-            <label>Shoes: <input type="color" id="color-shoes" value="#333333"></label>
             <br>
-            <button id="btn-save-wardrobe">Save & Exit</button>
+            <label style="color:white;"><input type="checkbox" id="mobile-toggle"> Enable Mobile Controls</label>
+            <br>
+            <button id="btn-back-settings">BACK TO MENU</button>
         </div>
     </div>
 
+    <!-- WARDROBE MENU -->
+    <div id="wardrobe-menu" class="ui-layer hidden">
+        <h2 style="font-family: 'Creepster', cursive; font-size: 3rem;">WARDROBE</h2>
+        <div class="menu-box">
+            <div class="color-row"><span>Hair:</span> <input type="color" id="color-hair" value="#221100"></div>
+            <div class="color-row"><span>Skin:</span> <input type="color" id="color-skin" value="#ffccaa"></div>
+            <div class="color-row"><span>Shirt:</span> <input type="color" id="color-clothes" value="#2244aa"></div>
+            <div class="color-row"><span>Pants:</span> <input type="color" id="color-pants" value="#111111"></div>
+            <div class="color-row"><span>Shoes:</span> <input type="color" id="color-shoes" value="#333333"></div>
+            <button id="btn-save-wardrobe" style="margin-top: 20px;">SAVE & EXIT</button>
+        </div>
+    </div>
+
+    <!-- PAUSE MENU -->
     <div id="pause-menu" class="ui-layer hidden">
         <h2>PAUSED</h2>
         <div class="menu-box">
-            <button id="btn-resume">Resume</button>
-            <button id="btn-leave">Leave Game</button>
+            <button id="btn-resume">RESUME</button>
+            <button id="btn-leave">LEAVE GAME</button>
         </div>
     </div>
 
+    <!-- DEATH SCREEN -->
     <div id="death-screen" class="ui-layer hidden">
-        <h1 id="day-text">DAY 2</h1>
-        <p id="death-subtext">Tung Tung Sahur caught you...</p>
+        <h1 id="day-text" style="font-size: 6rem; color: white;">DAY 2</h1>
+        <p style="font-size: 1.5rem; color: #ff0000;">Tung Tung Sahur caught you...</p>
     </div>
 
+    <!-- GAME HUD -->
     <div id="game-ui" class="hidden">
         <div id="pause-btn">||</div>
-        <div id="lives-display">Lives: 5</div>
-        <div id="ammo-display" class="hidden">Crossbow: EMPTY</div>
-        <div id="domain-display" class="hidden">DOMAIN EXPANSION: READY (Press J)</div>
+        <div id="lives-display" class="stat-box">DAYS REMAINING: 5</div>
+        <div id="ammo-display" class="stat-box hidden" style="right: 20px; color: #ffaa00; border-color: #ffaa00;">ARROWS: 0</div>
+        <div id="domain-display" class="stat-box hidden" style="top: 70px; left: 20px; color: #cc00ff; border-color: #cc00ff;">DOMAIN EXPANSION: READY [J]</div>
+        
         <div id="crosshair">+</div>
         <div id="interact-prompt"></div>
-        <div id="inventory-display">Holding: Nothing</div>
-        
+        <div id="inventory-text">Holding: Nothing</div>
+
+        <!-- Mobile Controls -->
         <div id="joystick-move" class="joystick hidden"><div class="knob"></div></div>
         <div id="joystick-look" class="joystick hidden"><div class="knob"></div></div>
         <div id="mobile-interact" class="mobile-btn hidden">HAND</div>
         <div id="mobile-drop" class="mobile-btn hidden">DROP</div>
-        <div id="mobile-crouch" class="mobile-btn hidden" style="background: rgba(0,255,255,0.4); bottom: 270px; right: 120px;">CROUCH</div>
+        <div id="mobile-crouch" class="mobile-btn hidden" style="background: rgba(0,255,255,0.3); border-color: #00ffff; bottom: 270px; right: 120px;">CROUCH</div>
         <div id="mobile-shoot" class="mobile-btn hidden" style="background: rgba(255,0,0,0.4); bottom: 270px; right: 40px;">SHOOT</div>
-        <div id="mobile-domain" class="mobile-btn hidden" style="background: rgba(150,0,255,0.4); bottom: 350px; right: 40px;">DOMAIN</div>
     </div>
+
+    <!-- AUDIO TAGS (For the Audio Mapping Engine) -->
+    <audio id="snd-chase" src="/audio/chase_music.mp3" loop></audio>
+    <audio id="snd-tung" src="/audio/tung_idle_1.mp3"></audio>
 
     <script src="/socket.io/socket.io.js"></script>
     <script type="importmap">
