@@ -1354,3 +1354,30 @@ if (controls) {
         }
     });
 }
+// ==========================================
+// 21. SETTINGS & WARDROBE EVENT LISTENERS
+// ==========================================
+document.getElementById('sensitivity')?.addEventListener('input', (e) => {
+    lookSensitivity = e.target.value * 0.0001;
+    const sensVal = document.getElementById('sens-val');
+    if (sensVal) sensVal.innerText = lookSensitivity.toFixed(4);
+});
+
+document.getElementById('mobile-toggle')?.addEventListener('change', (e) => {
+    mobileEnabled = e.target.checked;
+});
+
+document.getElementById('btn-save-wardrobe')?.addEventListener('click', () => {
+    myCustomization = {
+        hair: document.getElementById('color-hair').value,
+        skin: document.getElementById('color-skin').value,
+        shirt: document.getElementById('color-clothes').value,
+        pants: document.getElementById('color-pants').value,
+        shoes: document.getElementById('color-shoes').value
+    };
+    if (isMultiplayer && socket) socket.emit('updateWardrobe', myCustomization);
+    
+    const uiWardrobe = document.getElementById('wardrobe-menu');
+    if (uiWardrobe) uiWardrobe.classList.add('hidden');
+    if (!mobileEnabled && controls) controls.lock();
+});
