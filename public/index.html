@@ -13,9 +13,10 @@
         <p class="subtitle">Escape House 3D</p>
         <div class="menu-box">
             <input type="text" id="username-input" placeholder="Enter Username..." maxlength="15">
-            <button id="btn-singleplayer">PLAY SINGLE PLAYER</button>
-            <button id="btn-multiplayer">JOIN PUBLIC SERVER (50)</button>
-            <button id="btn-settings">SETTINGS</button>
+            <!-- FIXED: Direct window calls -->
+            <button onclick="window.startGame(false)">PLAY SINGLE PLAYER</button>
+            <button onclick="window.startGame(true)">JOIN PUBLIC SERVER (50)</button>
+            <button onclick="document.getElementById('settings-menu').classList.remove('hidden'); document.getElementById('main-menu').classList.add('hidden');">SETTINGS</button>
         </div>
     </div>
 
@@ -28,7 +29,8 @@
             <br>
             <label style="color:white;"><input type="checkbox" id="mobile-toggle"> Enable Mobile Controls</label>
             <br>
-            <button id="btn-back-settings">BACK TO MENU</button>
+            <!-- FIXED: Direct HTML transition -->
+            <button onclick="document.getElementById('settings-menu').classList.add('hidden'); document.getElementById('main-menu').classList.remove('hidden');">BACK TO MENU</button>
         </div>
     </div>
 
@@ -50,7 +52,8 @@
         <h2>PAUSED</h2>
         <div class="menu-box">
             <button id="btn-resume">RESUME</button>
-            <button id="btn-leave">LEAVE GAME</button>
+            <!-- FIXED: Reloads the page to leave -->
+            <button onclick="location.reload()">LEAVE GAME</button>
         </div>
     </div>
 
@@ -80,7 +83,7 @@
         <div id="mobile-shoot" class="mobile-btn hidden" style="background: rgba(255,0,0,0.4); bottom: 270px; right: 40px;">SHOOT</div>
     </div>
 
-    <!-- AUDIO TAGS (For the Audio Mapping Engine) -->
+    <!-- AUDIO TAGS -->
     <audio id="snd-chase" src="/audio/chase_music.mp3" loop></audio>
     <audio id="snd-tung" src="/audio/tung_idle_1.mp3"></audio>
 
