@@ -12,12 +12,16 @@ const MAX_PLAYERS = 50;
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- ITEM PRESETS ---
+// --- 5 ITEM PRESETS (1:1 Granny Style Randomization) ---
 const PRESETS = [
-    { hammer: {x: 15, y: -3.5, z: -25}, pliers: {x: 12, y: 0.5, z: 5}, master_key: {x: 0, y: 8.5, z: 0}, weapons_key: {x: -3, y: 0.5, z: 8}, gas_can: {x: 25, y: -3.5, z: -25}, car_key: {x: 5, y: 8.5, z: 5}, battery: {x: 10, y: 0.5, z: -5} }
+    { hammer: {x: 15, y: -3.5, z: -25}, pliers: {x: 12, y: 0.5, z: 5}, master_key: {x: 0, y: 8.5, z: 0}, weapons_key: {x: -3, y: 8.5, z: 8}, gas_can: {x: 25, y: -3.5, z: -25}, car_key: {x: 5, y: 8.5, z: 5}, battery: {x: 10, y: 0.5, z: -5} },
+    { hammer: {x: 0, y: 8.5, z: 0}, pliers: {x: 15, y: -3.5, z: -25}, master_key: {x: 12, y: 0.5, z: 5}, weapons_key: {x: 25, y: -3.5, z: -25}, gas_can: {x: -3, y: 8.5, z: 8}, car_key: {x: 10, y: 0.5, z: -5}, battery: {x: 5, y: 8.5, z: 5} },
+    { hammer: {x: 12, y: 0.5, z: 5}, pliers: {x: 0, y: 8.5, z: 0}, master_key: {x: 15, y: -3.5, z: -25}, weapons_key: {x: 5, y: 8.5, z: 5}, gas_can: {x: 10, y: 0.5, z: -5}, car_key: {x: 25, y: -3.5, z: -25}, battery: {x: -3, y: 8.5, z: 8} },
+    { hammer: {x: 25, y: -3.5, z: -25}, pliers: {x: -3, y: 8.5, z: 8}, master_key: {x: 10, y: 0.5, z: -5}, weapons_key: {x: 12, y: 0.5, z: 5}, gas_can: {x: 5, y: 8.5, z: 5}, car_key: {x: 15, y: -3.5, z: -25}, battery: {x: 0, y: 8.5, z: 0} },
+    { hammer: {x: 5, y: 8.5, z: 5}, pliers: {x: 10, y: 0.5, z: -5}, master_key: {x: -3, y: 8.5, z: 8}, weapons_key: {x: 0, y: 8.5, z: 0}, gas_can: {x: 15, y: -3.5, z: -25}, car_key: {x: 12, y: 0.5, z: 5}, battery: {x: 25, y: -3.5, z: -25} }
 ];
 
-let currentPresetIndex = 0;
+let currentPresetIndex = Math.floor(Math.random() * PRESETS.length);
 let players = {};
 let gameState = { items: {}, puzzles: {}, carParts: { gas: false, battery: false, key: false }, doors: {} };
 
@@ -36,17 +40,9 @@ function loadPreset() {
         'car_key': { pos: p.car_key, holder: null, visible: true },
         'battery': { pos: p.battery, holder: null, visible: true }
     };
-    gameState.puzzles = { 
-        'barricade': { solved: false }, 'circuitBox': { solved: false }, 'mainDoor': { solved: false }, 'weaponsCase': { solved: false, isOpen: false } 
-    };
+    gameState.puzzles = { 'barricade': { solved: false }, 'circuitBox': { solved: false }, 'mainDoor': { solved: false }, 'weaponsCase': { solved: false, isOpen: false } };
     gameState.carParts = { gas: false, battery: false, key: false };
-    
-    // NEW: Door States (False = Closed, True = Open)
-    gameState.doors = {
-        'bedroom': false,
-        'weapons_room': false,
-        'basement_top': false
-    };
+    gameState.doors = { 'bedroom': false, 'weapons_room': false, 'basement_top': false, 'spider_room': false };
 }
 loadPreset();
 
@@ -57,42 +53,41 @@ io.on('connection', (socket) => {
         return;
     }
 
+    // 0.67% Chance for Domain Expansion!
     const hasDomain = Math.random() < 0.0067;
 
     players[socket.id] = { 
         id: socket.id, username: 'Guest-' + Math.floor(Math.random() * 9000000), 
-        pos: { x: 0, y: 9.7, z: 2 }, // Spawn slightly offset to prevent wall clipping
-        rot: 0, lives: 5, isDead: false, isHiding: false, isCrouching: false, hasDomain: hasDomain,
-        customization: { hair: '#000000', clothes: '#2244aa', skin: '#ffccaa', pants: '#111111', shoes: '#333333' }
+        pos: { x: 0, y: 9.7, z: 2 }, rot: 0, lives: 5, isDead: false, isHiding: false, crouch: false, hasDomain: hasDomain,
+        colors: { hair: '#000000', clothes: '#2244aa', skin: '#ffccaa', pants: '#111111', shoes: '#333333' }
     };
 
     socket.emit('init', { id: socket.id, players, gameState, presetIndex: currentPresetIndex });
     socket.broadcast.emit('playerJoined', players[socket.id]);
 
     socket.on('setUsername', (name) => { if (name.trim().length > 0) players[socket.id].username = name.trim(); });
-    socket.on('updateCustomization', (colors) => { if (players[socket.id]) { players[socket.id].customization = colors; io.emit('playerCustomized', { id: socket.id, colors: colors }); } });
+    
+    socket.on('updateWardrobe', (colors) => {
+        if (players[socket.id]) {
+            players[socket.id].colors = colors;
+            io.emit('playerUpdated', { id: socket.id, username: players[socket.id].username, colors: colors });
+        }
+    });
 
     socket.on('move', (data) => {
         if (players[socket.id] && !players[socket.id].isDead) {
             players[socket.id].pos = data.pos;
             players[socket.id].rot = data.rot;
-            players[socket.id].isCrouching = data.isCrouching;
-            socket.broadcast.emit('playerMoved', { id: socket.id, pos: data.pos, rot: data.rot, isCrouching: data.isCrouching });
+            players[socket.id].crouch = data.crouch;
+            socket.broadcast.emit('playerMoved', { id: socket.id, pos: data.pos, rot: data.rot, crouch: data.crouch });
         }
     });
 
     socket.on('setHiding', (isHiding) => { if (players[socket.id]) { players[socket.id].isHiding = isHiding; socket.broadcast.emit('playerHiding', { id: socket.id, isHiding: isHiding }); } });
-    socket.on('makeNoise', (pos) => io.emit('noiseMade', pos));
+    socket.on('doorAction', (data) => { gameState.doors[data.id] = data.open; io.emit('doorSync', data); });
+    socket.on('noise', (pos) => io.emit('noiseMade', pos));
     socket.on('shootTungTung', () => io.emit('tungTungKnockedOut'));
     socket.on('activateDomain', (pos) => { if (players[socket.id] && players[socket.id].hasDomain) io.emit('domainActivated', { id: socket.id, pos: pos }); });
-
-    // NEW: Sync Doors
-    socket.on('toggleDoor', (data) => {
-        if (gameState.doors[data.id] !== undefined) {
-            gameState.doors[data.id] = data.isOpen;
-            io.emit('doorToggled', data);
-        }
-    });
 
     socket.on('itemAction', (data) => {
         const item = gameState.items[data.itemId];
@@ -107,17 +102,12 @@ io.on('connection', (socket) => {
         if (gameState.puzzles[data.obstacleId]) {
             gameState.puzzles[data.obstacleId].solved = true;
             io.emit('puzzleUpdate', { obstacleId: data.obstacleId });
-            
             if (data.obstacleId === 'weaponsCase') {
                 gameState.puzzles['weaponsCase'].isOpen = true;
-                gameState.items['crossbow'].visible = true;
-                gameState.items['arrow_1'].visible = true;
-                gameState.items['arrow_2'].visible = true;
-                gameState.items['arrow_3'].visible = true;
-                io.emit('itemUpdate', { itemId: 'crossbow', itemState: gameState.items['crossbow'] });
-                io.emit('itemUpdate', { itemId: 'arrow_1', itemState: gameState.items['arrow_1'] });
-                io.emit('itemUpdate', { itemId: 'arrow_2', itemState: gameState.items['arrow_2'] });
-                io.emit('itemUpdate', { itemId: 'arrow_3', itemState: gameState.items['arrow_3'] });
+                ['crossbow', 'arrow_1', 'arrow_2', 'arrow_3'].forEach(id => {
+                    gameState.items[id].visible = true;
+                    io.emit('itemUpdate', { itemId: id, itemState: gameState.items[id] });
+                });
             }
             if (data.obstacleId === 'mainDoor') { io.emit('gameWon', { winner: players[socket.id].username, type: 'Front Door' }); resetServerState(); }
         }
@@ -147,10 +137,11 @@ io.on('connection', (socket) => {
 });
 
 function resetServerState() {
+    currentPresetIndex = Math.floor(Math.random() * PRESETS.length);
     loadPreset();
-    Object.keys(players).forEach(k => { players[k].lives = 5; players[k].isDead = false; players[k].isHiding = false; players[k].isCrouching = false; });
+    Object.keys(players).forEach(k => { players[k].lives = 5; players[k].isDead = false; players[k].isHiding = false; players[k].crouch = false; });
     io.emit('serverReset', { gameState, presetIndex: currentPresetIndex });
 }
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-server.listen(PORT, () => console.log(`Server cooking on port ${PORT}`));
+server.listen(PORT, () => console.log(`Cooking on port ${PORT}`));
